@@ -19,15 +19,15 @@
         <option value="ble">Bluetooth (BLE)</option>
         <option value="serial">USB Serial (COM)</option>
       </select>
-      <span class="muted" id="connHint" style="margin-left:auto;"></span>
+      <span class="muted mlAuto" id="connHint"></span>
     </div>
 
-    <div class="btnRow" style="margin-top:8px;">
+    <div class="btnRow mt8">
       <button id="connectBtn">Connect</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
     </div>
 
-    <div class="pillRow" style="margin-top:8px;">
+    <div class="pillRow mt8">
       <span id="status" class="pill bad">Disconnected</span>
       <span id="busy" class="pill">idle</span>
     </div>
@@ -44,7 +44,7 @@
   
   <!-- Tabs: Tasks / Groups -->
   <div class="card">
-    <div class="row" style="gap:10px; margin-bottom:10px;">
+   <div class="row gap10 mb10">
       <button class="btn btnSmall btnPrimary" id="tabGroupsBtn" type="button">Groups</button>
       <button class="btn btnSmall" id="tabTasksBtn" type="button">Tasks</button>
       <span class="muted" style="margin-left:auto;" id="activeTabHint">Groups</span>
@@ -52,21 +52,26 @@
 
     <!-- Tasks panel -->
     <div id="panelTasks" style="display:none;">
-      <div class="row" style="gap:10px; margin-bottom:10px;">
+      <div class="row gap10 mb10">
         <button class="btn btnSmall" id="syncTasksBtn" disabled>Sync Tasks</button>
         
         <label class="muted" for="taskSelect">Task:</label>
         <select id="taskSelect" disabled>
           <option value="">(connect to load tasks)</option>
         </select>
+
+        <label class="muted" for="taskFilter">Search:</label>
+        <input id="taskFilter" type="text" placeholder="Search…" disabled>
+
         <button id="downloadCsvBtn" disabled>Download CSV</button>
+
         
       </div>
 
-      <h3 style="margin:0 0 6px;">Preview</h3>
+      <h3 class="mb6">Preview</h3>
       <div class="muted" id="previewMeta">No task selected.</div>
 
-      <div class="scroll" style="max-height: 320px;">
+      <div class="scroll scrollTall">
         <table>
           <thead><tr id="previewHead"></tr></thead>
           <tbody id="previewBody"></tbody>
@@ -76,33 +81,37 @@
 
     <!-- Groups panel -->
     <div id="panelGroups">
-      <div class="row" style="gap:10px; margin-bottom:10px;">
+      <div class="row gap10 mb10">
         <button class="btn btnSmall" id="syncGroupsBtn" disabled>Sync Groups</button>
 
-        <label class="muted" for="groupSelect">Group:</label>
-        <select id="groupSelect" disabled>
-          <option value="">(sync groups)</option>
-        </select>
+      <label class="muted" for="groupSelect">Group:</label>
+      <select id="groupSelect" disabled>
+        <option value="">(sync groups)</option>
+      </select>
 
-        <label class="muted" style="display:flex; align-items:center; gap:6px;">
+      <label class="muted" for="groupFilter">Search:</label>
+      <input id="groupFilter" type="text" placeholder="Search…" disabled>
+
+
+        <label class="muted inlineCheck">
           <input type="checkbox" id="preferGroupX" checked />
-          Prefer XGGROUPX (weight)
+          EID + Weight
         </label>
 
         <button id="downloadGroupCsvBtn" disabled>Download Group CSV</button>
       </div>
 
-      <h3 style="margin:0 0 6px;">Preview</h3>
+      <h3 class="mb6">Preview</h3>
       <div class="muted" id="groupPreviewMeta">No group selected.</div>
 
-      <div class="scroll" style="max-height: 320px;">
+      <div class="scroll scrollTall">
         <table>
           <thead><tr id="groupPreviewHead"></tr></thead>
           <tbody id="groupPreviewBody"></tbody>
         </table>
       </div>
 
-      <div class="muted" id="groupsSyncedAt" style="margin-top:8px;"></div>
+      <div class="muted mt8" id="groupsSyncedAt"></div>
     </div>
   </div>
 

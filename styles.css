@@ -263,3 +263,22 @@ th {
 
   table { min-width: 680px; }
 }
+
+/* ---------- Utility spacing helpers ---------- */
+
+.mlAuto { margin-left: auto; }
+
+.mt8 { margin-top: 8px; }
+.mb6 { margin-bottom: 6px; }
+.mb10 { margin-bottom: 10px; }
+
+.gap10 { gap: 10px; }
+
+.scrollTall { max-height: 320px; }
+
+.inlineCheck {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
