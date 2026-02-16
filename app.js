@@ -24,6 +24,15 @@ import { createWandSession } from "./wand/session.js";
 import { fetchTasks, fetchTaskHeaders, fetchTaskRows } from "./wand/commands/tasks.js";
 import { fetchGroups, fetchGroupRows } from "./wand/commands/groups.js";
 
+import { parseCSV } from "./parsers/csv_import.js";
+
+import { fetchTaglist, eraseTaglist, uploadTaglist } from "./wand/commands/taglist.js";
+import { fetchAlerts, eraseAlerts, uploadAlerts } from "./wand/commands/alerts.js";
+
+import { renderTaglistPreview, TAGLIST_HEADERS } from "./ui/renderTaglist.js";
+import { renderAlertsPreview, ALERT_HEADERS } from "./ui/renderAlerts.js";
+
+
 const SERIAL_BAUD = 9600;
 const APPEND_CR = false;
 const APPEND_LF = false;
@@ -49,6 +58,11 @@ let groupHeaders = [];
 let groupRows = [];
 
 let preferGroupX = true;
+
+let tagRows = [];          // [{eid, vid, alertNo}]
+let tagRowsLoaded = [];    // from CSV
+let alertRows = [];        // [{alertNo, alertText}]
+let alertRowsLoaded = [];  // from CSV
 
 // -----------------------
 // Transport + Session
@@ -85,30 +99,52 @@ function buildSession() {
 const tabs = createTabs(els, "groups");
 els.tabTasksBtn?.addEventListener("click", () => tabs.setActiveTab("tasks"));
 els.tabGroupsBtn?.addEventListener("click", () => tabs.setActiveTab("groups"));
+els.tabTaglistBtn?.addEventListener("click", () => tabs.setActiveTab("taglist"));
 
 // -----------------------
 // Modal Editor
 // -----------------------
 const editor = createModalEditor(els, {
-  getRow: (mode, idx) => (mode === "groups" ? groupRows[idx] : taskRows[idx]),
-  setRow: (mode, idx, updated) => {
-    const headers = mode === "groups"
-      ? getGroupHeaders(groupHeaders, groupRows)
-      : getTaskHeaders(taskHeaders, taskRows);
+  getRow: (mode, idx) => {
+    if (mode === "taglist") return [tagRows[idx]?.eid ?? "", tagRows[idx]?.vid ?? "", tagRows[idx]?.alertNo ?? "0"];
+    if (mode === "alerts") return [alertRows[idx]?.alertNo ?? "", alertRows[idx]?.alertText ?? ""];
+    return mode === "groups" ? groupRows[idx] : taskRows[idx];
+  },
 
+  setRow: (mode, idx, updated) => {
+    if (mode === "taglist") {
+      tagRows[idx] = { eid: updated[0] ?? "", vid: updated[1] ?? "", alertNo: updated[2] ?? "0" };
+      return;
+    }
+    if (mode === "alerts") {
+      alertRows[idx] = { alertNo: updated[0] ?? "", alertText: updated[1] ?? "" };
+      return;
+    }
+
+    // existing tasks/groups logic stays as-is...
+    const headers = mode === "groups" ? getGroupHeaders(groupHeaders, groupRows) : getTaskHeaders(taskHeaders, taskRows);
     const formatted = formatRow(updated, headers);
     if (mode === "groups") groupRows[idx] = formatted;
     else taskRows[idx] = formatted;
   },
+
   deleteRow: (mode, idx) => {
+    if (mode === "taglist") { tagRows.splice(idx, 1); return; }
+    if (mode === "alerts") { alertRows.splice(idx, 1); return; }
     if (mode === "groups") groupRows.splice(idx, 1);
     else taskRows.splice(idx, 1);
   },
-  getHeaders: (mode) => (mode === "groups"
-    ? getGroupHeaders(groupHeaders, groupRows)
-    : getTaskHeaders(taskHeaders, taskRows)
-  ),
+
+  getHeaders: (mode) => {
+    if (mode === "taglist") return TAGLIST_HEADERS;
+    if (mode === "alerts") return ALERT_HEADERS;
+    return mode === "groups" ? getGroupHeaders(groupHeaders, groupRows) : getTaskHeaders(taskHeaders, taskRows);
+  },
+
   getSubtitle: (mode, realIndex) => {
+    if (mode === "taglist") return `Taglist — Row ${realIndex + 1}`;
+    if (mode === "alerts") return `Alerts — Row ${realIndex + 1}`;
+    // existing...
     if (mode === "groups") {
       const g = selectedGroup;
       return g ? `Group ${g.id}: ${g.name} — Row ${realIndex + 1}` : `Group row ${realIndex + 1}`;
@@ -117,11 +153,15 @@ const editor = createModalEditor(els, {
       ? `Task ${selectedTask.idx}: ${selectedTask.name} — Row ${realIndex + 1}`
       : `Row ${realIndex + 1}`;
   },
+
   onAfterChange: (mode) => {
-    if (mode === "groups") rerenderGroups();
+    if (mode === "taglist") rerenderTaglist();
+    else if (mode === "alerts") rerenderAlerts();
+    else if (mode === "groups") rerenderGroups();
     else rerenderTasks();
   },
 });
+
 
 // -----------------------
 // Render wrappers
@@ -191,6 +231,76 @@ function rerenderGroups() {
   }
 }
 
+function rerenderTaglist() {
+  const isConn = !!transport?.isConnected;
+
+  // enable buttons
+  els.syncTaglistBtn.disabled = !isConn;
+  els.eraseTaglistBtn.disabled = !isConn;
+  els.downloadTaglistCsvBtn.disabled = !(isConn && tagRows.length);
+
+  els.taglistFile.disabled = !isConn;
+  els.uploadTaglistBtn.disabled = !(isConn && tagRowsLoaded.length);
+
+  const q = (els.taglistFilter?.value || "").trim().toLowerCase();
+  els.taglistFilter.disabled = !(isConn && tagRows.length);
+
+  let view = tagRows.map((r, i) => ({ r, realIndex: i }));
+  if (q) {
+    view = view.filter(({ r }) => `${r.eid} ${r.vid} ${r.alertNo}`.toLowerCase().includes(q));
+  }
+
+  renderTaglistPreview(els, {
+    rows: tagRows,
+    view,
+    isConnected: isConn,
+    onEditRow: (idx) => editor.openEditor("taglist", idx),
+    onDeleteRow: (idx) => {
+      if (!confirm(`Delete tag row #${idx + 1}?`)) return;
+      tagRows.splice(idx, 1);
+      rerenderTaglist();
+    },
+    statusText: tagRowsLoaded.length
+      ? `Taglist — ${tagRows.length} on device. ${tagRowsLoaded.length} loaded from CSV (ready to upload).`
+      : `Taglist — ${tagRows.length} on device.`,
+  });
+}
+
+function rerenderAlerts() {
+  const isConn = !!transport?.isConnected;
+
+  els.syncAlertsBtn.disabled = !isConn;
+  els.eraseAlertsBtn.disabled = !isConn;
+  els.downloadAlertsCsvBtn.disabled = !(isConn && alertRows.length);
+
+  els.alertsFile.disabled = !isConn;
+  els.uploadAlertsBtn.disabled = !(isConn && alertRowsLoaded.length);
+
+  const q = (els.alertsFilter?.value || "").trim().toLowerCase();
+  els.alertsFilter.disabled = !(isConn && alertRows.length);
+
+  let view = alertRows.map((r, i) => ({ r, realIndex: i }));
+  if (q) {
+    view = view.filter(({ r }) => `${r.alertNo} ${r.alertText}`.toLowerCase().includes(q));
+  }
+
+  renderAlertsPreview(els, {
+    rows: alertRows,
+    view,
+    isConnected: isConn,
+    onEditRow: (idx) => editor.openEditor("alerts", idx),
+    onDeleteRow: (idx) => {
+      if (!confirm(`Delete alert row #${idx + 1}?`)) return;
+      alertRows.splice(idx, 1);
+      rerenderAlerts();
+    },
+    statusText: alertRowsLoaded.length
+      ? `Alerts — ${alertRows.length} on device. ${alertRowsLoaded.length} loaded from CSV (ready to upload).`
+      : `Alerts — ${alertRows.length} on device.`,
+  });
+}
+
+
 
 // -----------------------
 // Connect / Disconnect
@@ -203,8 +313,13 @@ async function connect() {
     // reset state
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
+    tagRows = []; tagRowsLoaded = [];
+    alertRows = []; alertRowsLoaded = [];
+
     rerenderTasks();
     rerenderGroups();
+    rerenderTaglist();
+    rerenderAlerts();
 
     els.connectBtn.disabled = true;
     els.disconnectBtn.disabled = false;
@@ -242,6 +357,8 @@ async function connect() {
     tabs.setActiveTab("groups");
     rerenderTasks();
     rerenderGroups();
+    rerenderTaglist();
+    rerenderAlerts();
   } catch (e) {
     alert(`Connect failed: ${e?.message || e}`);
     await cleanup();
@@ -266,8 +383,16 @@ async function cleanup() {
   tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
   groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
 
+  tagRows = []; tagRowsLoaded = [];
+  tagRowsLoaded = [];
+  
+  alertRows = [];
+  alertRowsLoaded = [];
+
   rerenderTasks();
   rerenderGroups();
+  rerenderTaglist();
+  rerenderAlerts();
 
   setStatus(els, "Disconnected", false);
   setBusy(els, "idle");
@@ -377,6 +502,176 @@ els.groupSelect.addEventListener("change", async () => {
   }
 });
 
+// --- Taglist ---
+els.syncTaglistBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    els.syncTaglistBtn.disabled = true;
+    tagRows = await fetchTaglist(session);
+  } catch (e) {
+    alert(`Failed to sync taglist: ${e?.message || e}`);
+  } finally {
+    els.syncTaglistBtn.disabled = !(transport?.isConnected);
+    rerenderTaglist();
+  }
+});
+
+els.eraseTaglistBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    if (!confirm("Erase ALL taglist entries on the wand?")) return;
+    els.eraseTaglistBtn.disabled = true;
+    await eraseTaglist(session);
+    tagRows = [];
+  } catch (e) {
+    alert(`Failed to erase taglist: ${e?.message || e}`);
+  } finally {
+    els.eraseTaglistBtn.disabled = !(transport?.isConnected);
+    rerenderTaglist();
+  }
+});
+
+els.downloadTaglistCsvBtn.addEventListener("click", () => {
+  const headers = TAGLIST_HEADERS;
+  const rows = tagRows.map((r) => [r.eid ?? "", r.vid ?? "", r.alertNo ?? "0"]);
+  downloadText(`taglist.csv`, toCSV(headers, rows));
+});
+
+els.taglistFile.addEventListener("change", async () => {
+  const f = els.taglistFile.files?.[0];
+  if (!f) return;
+
+  const text = await f.text();
+  const rows = parseCSV(text);
+
+  // Expect headers row: EID,VID,AlertNo (case-insensitive)
+  const head = (rows[0] || []).map((s) => s.toLowerCase());
+  const iE = head.indexOf("eid");
+  const iV = head.indexOf("vid");
+  const iA = head.indexOf("alertno");
+
+  const data = rows.slice(1).map((r) => ({
+    eid: r[iE] ?? r[0] ?? "",
+    vid: r[iV] ?? r[1] ?? "",
+    alertNo: r[iA] ?? r[2] ?? "0",
+  })).filter((r) => String(r.eid).trim() !== "");
+
+  tagRowsLoaded = data;
+  rerenderTaglist();
+});
+
+els.uploadTaglistBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    if (!tagRowsLoaded.length) return;
+
+    if (!confirm(`Upload ${tagRowsLoaded.length} tags to the wand?\n\n(They will be appended; existing taglist stays unless you erase first.)`)) {
+      return;
+    }
+
+    els.uploadTaglistBtn.disabled = true;
+
+    await uploadTaglist(session, tagRowsLoaded, {
+      onProgress: ({ i, total }) => {
+        els.taglistMeta.textContent = `Uploading taglist… ${i}/${total}`;
+      }
+    });
+
+    els.taglistMeta.textContent = `Upload complete. (Tip: re-sync taglist to confirm.)`;
+  } catch (e) {
+    alert(`Failed to upload taglist: ${e?.message || e}`);
+  } finally {
+    els.uploadTaglistBtn.disabled = !(transport?.isConnected && tagRowsLoaded.length);
+    rerenderTaglist();
+  }
+});
+
+// Filter typing
+els.taglistFilter?.addEventListener("input", () => rerenderTaglist());
+
+
+// --- Alerts ---
+els.syncAlertsBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    els.syncAlertsBtn.disabled = true;
+    alertRows = await fetchAlerts(session);
+  } catch (e) {
+    alert(`Failed to sync alerts: ${e?.message || e}`);
+  } finally {
+    els.syncAlertsBtn.disabled = !(transport?.isConnected);
+    rerenderAlerts();
+  }
+});
+
+els.eraseAlertsBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    if (!confirm("Erase ALL alert strings on the wand?")) return;
+    els.eraseAlertsBtn.disabled = true;
+    await eraseAlerts(session);
+    alertRows = [];
+  } catch (e) {
+    alert(`Failed to erase alerts: ${e?.message || e}`);
+  } finally {
+    els.eraseAlertsBtn.disabled = !(transport?.isConnected);
+    rerenderAlerts();
+  }
+});
+
+els.downloadAlertsCsvBtn.addEventListener("click", () => {
+  const headers = ALERT_HEADERS;
+  const rows = alertRows.map((r) => [r.alertNo ?? "", r.alertText ?? ""]);
+  downloadText(`alerts.csv`, toCSV(headers, rows));
+});
+
+els.alertsFile.addEventListener("change", async () => {
+  const f = els.alertsFile.files?.[0];
+  if (!f) return;
+
+  const text = await f.text();
+  const rows = parseCSV(text);
+
+  const head = (rows[0] || []).map((s) => s.toLowerCase());
+  const iN = head.indexOf("alertno");
+  const iT = head.indexOf("alerttext");
+
+  const data = rows.slice(1).map((r) => ({
+    alertNo: r[iN] ?? r[0] ?? "",
+    alertText: r[iT] ?? r[1] ?? "",
+  })).filter((r) => String(r.alertNo).trim() !== "");
+
+  alertRowsLoaded = data;
+  rerenderAlerts();
+});
+
+els.uploadAlertsBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    if (!alertRowsLoaded.length) return;
+
+    if (!confirm(`Upload ${alertRowsLoaded.length} alert strings to the wand?`)) return;
+
+    els.uploadAlertsBtn.disabled = true;
+
+    await uploadAlerts(session, alertRowsLoaded, {
+      onProgress: ({ i, total }) => {
+        els.alertsMeta.textContent = `Uploading alerts… ${i}/${total}`;
+      }
+    });
+
+    els.alertsMeta.textContent = `Upload complete. (Tip: re-sync alerts to confirm.)`;
+  } catch (e) {
+    alert(`Failed to upload alerts: ${e?.message || e}`);
+  } finally {
+    els.uploadAlertsBtn.disabled = !(transport?.isConnected && alertRowsLoaded.length);
+    rerenderAlerts();
+  }
+});
+
+els.alertsFilter?.addEventListener("input", () => rerenderAlerts());
+
+
 // Download CSVs
 els.downloadCsvBtn.addEventListener("click", () => {
   if (!selectedTask) return;
@@ -401,6 +696,8 @@ tabs.setActiveTab("groups");
 
 rerenderTasks();
 rerenderGroups();
+rerenderTaglist();
+rerenderAlerts();
 
 taskFilterEl?.addEventListener("input", () => rerenderTasks());
 groupFilterEl?.addEventListener("input", () => rerenderGroups());

@@ -47,6 +47,7 @@
    <div class="row gap10 mb10">
       <button class="btn btnSmall btnPrimary" id="tabGroupsBtn" type="button">Groups</button>
       <button class="btn btnSmall" id="tabTasksBtn" type="button">Tasks</button>
+      <button class="btn btnSmall" id="tabTaglistBtn" type="button">Taglist</button>
       <span class="muted" style="margin-left:auto;" id="activeTabHint">Groups</span>
     </div>
 
@@ -114,6 +115,67 @@
       <div class="muted mt8" id="groupsSyncedAt"></div>
     </div>
   </div>
+
+  <!-- Taglist & Alerts panel -->
+  <div id="panelTaglist" style="display:none;">
+    <div class="card">
+      <div class="row gap10 mb10">
+        <button class="btn" id="syncTaglistBtn" disabled>Sync Taglist</button>
+        <button class="btn btnDanger" id="eraseTaglistBtn" disabled>Erase Taglist</button>
+
+        <label class="muted" for="taglistFilter">Filter:</label>
+        <input id="taglistFilter" type="text" placeholder="Filter tags…" disabled>
+
+        <button class="btn" id="downloadTaglistCsvBtn" disabled>Download Taglist CSV</button>
+      </div>
+
+      <div class="row gap10 mb10">
+        <label class="muted" for="taglistFile">Load CSV:</label>
+        <input id="taglistFile" type="file" accept=".csv,text/csv" disabled>
+
+        <button class="btn btnPrimary" id="uploadTaglistBtn" disabled>Upload CSV to Wand</button>
+      </div>
+
+      <div class="muted" id="taglistMeta">Taglist — not loaded.</div>
+
+      <div class="scroll scrollTall">
+        <table>
+          <thead><tr id="taglistHead"></tr></thead>
+          <tbody id="taglistBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row gap10 mb10">
+        <button class="btn" id="syncAlertsBtn" disabled>Sync Alerts</button>
+        <button class="btn btnDanger" id="eraseAlertsBtn" disabled>Erase Alerts</button>
+
+        <label class="muted" for="alertsFilter">Filter:</label>
+        <input id="alertsFilter" type="text" placeholder="Filter alerts…" disabled>
+
+        <button class="btn" id="downloadAlertsCsvBtn" disabled>Download Alerts CSV</button>
+      </div>
+
+      <div class="row gap10 mb10">
+        <label class="muted" for="alertsFile">Load CSV:</label>
+        <input id="alertsFile" type="file" accept=".csv,text/csv" disabled>
+
+        <button class="btn btnPrimary" id="uploadAlertsBtn" disabled>Upload CSV to Wand</button>
+      </div>
+
+      <div class="muted" id="alertsMeta">Alerts — not loaded.</div>
+
+      <div class="scroll scrollTall">
+        <table>
+          <thead><tr id="alertsHead"></tr></thead>
+          <tbody id="alertsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
 
   <!-- Modal editor -->
   <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">

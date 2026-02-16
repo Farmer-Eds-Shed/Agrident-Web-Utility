@@ -100,7 +100,28 @@ export class BleTransport {
 
   async write(text) {
     if (!this.char) throw new Error("BLE characteristic missing");
-    await this.char.writeValue(enc.encode(text));
+
+    const bytes = enc.encode(text);
+
+    // Safe default for BLE without MTU negotiation
+    const CHUNK_SIZE = 20;
+
+    for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+      const chunk = bytes.slice(i, i + CHUNK_SIZE);
+
+      // Prefer writeWithoutResponse if available
+      if (this.char.properties?.writeWithoutResponse) {
+        await this.char.writeValueWithoutResponse(chunk);
+      } else {
+        await this.char.writeValue(chunk);
+      }
+
+      // Small delay helps stability on mobile stacks
+      await sleep(10);
+    }
+
+    // Existing delay between frames
     await sleep(35);
   }
+
 }

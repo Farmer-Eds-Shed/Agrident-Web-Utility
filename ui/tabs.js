@@ -1,20 +1,28 @@
 // ui/tabs.js
-export function createTabs(els, initialTab = "groups") {
-  let activeTab = initialTab === "tasks" ? "tasks" : "groups";
 
-  function setActiveTab(tab) {
-    activeTab = tab === "tasks" ? "tasks" : "groups";
+export function createTabs(els, defaultTab = "groups") {
+  const map = {
+    tasks: { btn: els.tabTasksBtn, panel: els.panelTasks, hint: "Tasks" },
+    groups: { btn: els.tabGroupsBtn, panel: els.panelGroups, hint: "Groups" },
+    taglist: { btn: els.tabTaglistBtn, panel: els.panelTaglist, hint: "Taglist" },
+  };
 
-    if (els.panelTasks) els.panelTasks.style.display = (activeTab === "tasks") ? "" : "none";
-    if (els.panelGroups) els.panelGroups.style.display = (activeTab === "groups") ? "" : "none";
+  function setActiveTab(tabKey) {
+    const keys = Object.keys(map);
 
-    els.tabTasksBtn?.classList.toggle("btnPrimary", activeTab === "tasks");
-    els.tabGroupsBtn?.classList.toggle("btnPrimary", activeTab === "groups");
+    for (const k of keys) {
+      const { btn, panel } = map[k];
+      if (!btn || !panel) continue;
 
-    if (els.activeTabHint) els.activeTabHint.textContent = (activeTab === "tasks") ? "Tasks" : "Groups";
+      const active = (k === tabKey);
+      btn.classList.toggle("btnPrimary", active);
+      panel.style.display = active ? "" : "none";
+    }
+
+    if (els.activeTabHint) els.activeTabHint.textContent = map[tabKey]?.hint ?? tabKey;
   }
 
-  setActiveTab(activeTab);
+  setActiveTab(defaultTab);
 
-  return { getActiveTab: () => activeTab, setActiveTab };
+  return { setActiveTab };
 }

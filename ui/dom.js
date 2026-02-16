@@ -36,6 +36,32 @@ export function getEls() {
     groupPreviewBody: document.getElementById("groupPreviewBody"),
     groupsSyncedAtEl: document.getElementById("groupsSyncedAt"),
 
+    tabTaglistBtn: document.getElementById("tabTaglistBtn"),
+    panelTaglist: document.getElementById("panelTaglist"),
+
+    // Taglist UI
+    syncTaglistBtn: document.getElementById("syncTaglistBtn"),
+    eraseTaglistBtn: document.getElementById("eraseTaglistBtn"),
+    downloadTaglistCsvBtn: document.getElementById("downloadTaglistCsvBtn"),
+    taglistFile: document.getElementById("taglistFile"),
+    uploadTaglistBtn: document.getElementById("uploadTaglistBtn"),
+    taglistFilter: document.getElementById("taglistFilter"),
+    taglistMeta: document.getElementById("taglistMeta"),
+    taglistHead: document.getElementById("taglistHead"),
+    taglistBody: document.getElementById("taglistBody"),
+
+    // Alerts UI
+    syncAlertsBtn: document.getElementById("syncAlertsBtn"),
+    eraseAlertsBtn: document.getElementById("eraseAlertsBtn"),
+    downloadAlertsCsvBtn: document.getElementById("downloadAlertsCsvBtn"),
+    alertsFile: document.getElementById("alertsFile"),
+    uploadAlertsBtn: document.getElementById("uploadAlertsBtn"),
+    alertsFilter: document.getElementById("alertsFilter"),
+    alertsMeta: document.getElementById("alertsMeta"),
+    alertsHead: document.getElementById("alertsHead"),
+    alertsBody: document.getElementById("alertsBody"),
+
+
     // modal
     overlay: document.getElementById("overlay"),
     modalTitle: document.getElementById("modalTitle"),

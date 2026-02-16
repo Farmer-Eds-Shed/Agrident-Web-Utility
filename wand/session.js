@@ -17,7 +17,7 @@ export function createWandSession({
 
   const writeQueue = [];
   let writing = false;
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const isBracketFrame = (s) => s.startsWith("[") && s.endsWith("]");
   const isCmdFrame = (s, cmd) => s.startsWith("[" + cmd);
@@ -52,17 +52,22 @@ export function createWandSession({
     }
   }
 
-  function beginCommand(name, okToken) {
+  function beginCommand(name, okToken, matcher = null, timeoutOverride = null) {
     if (currentCommand) throw new Error(`Busy running ${currentCommand.name}`);
 
     let resolve, reject;
-    const p = new Promise((res, rej) => { resolve = res; reject = rej; });
+    const p = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
 
-    currentCommand = { name, okToken, frames: [], resolve, reject };
+    currentCommand = { name, okToken, matcher, frames: [], resolve, reject };
     setBusy?.(name);
     onCommandUIStateChange?.(true);
 
     if (cmdTimer) clearTimeout(cmdTimer);
+    const tMs = typeof timeoutOverride === "number" && timeoutOverride > 0 ? timeoutOverride : timeoutMs;
+
     cmdTimer = setTimeout(() => {
       const done = currentCommand;
       currentCommand = null;
@@ -71,7 +76,7 @@ export function createWandSession({
       onCommandUIStateChange?.(false);
 
       if (done) done.reject(new Error("Timeout"));
-    }, timeoutMs);
+    }, tMs);
 
     return p;
   }
@@ -93,8 +98,25 @@ export function createWandSession({
 
   function onFrame(f) {
     if (!currentCommand) return;
+
     currentCommand.frames.push(f);
-    if (isOkFrame(f, currentCommand.okToken)) finishCommand(true);
+
+    // ✅ If a predicate matcher is provided, it decides completion.
+    if (typeof currentCommand.matcher === "function") {
+      try {
+        if (currentCommand.matcher(f)) {
+          finishCommand(true);
+        }
+      } catch (e) {
+        finishCommand(false, e);
+      }
+      return;
+    }
+
+    // ✅ Otherwise fall back to okToken matching (existing behaviour)
+    if (currentCommand.okToken && isOkFrame(f, currentCommand.okToken)) {
+      finishCommand(true);
+    }
   }
 
   async function enqueueWrite(str) {
@@ -140,12 +162,49 @@ export function createWandSession({
     return null;
   }
 
+  /**
+   * Send a bracket frame and wait for a fuzzy match (predicate).
+   * This is ideal for tag uploads where the device echoes a frame but may normalize/truncate fields.
+   */
+  async function sendFrameAndWait(frame, matchFn, { name = "Send frame", timeoutMsOverride = null } = {}) {
+    if (!transport.isConnected) throw new Error("Not connected");
+
+    const clean = String(frame).trim();
+    if (!clean.startsWith("[")) throw new Error("Frame must start with '['");
+    if (!clean.endsWith("]")) throw new Error("Frame must end with ']'");
+
+    let out = clean;
+    if (appendCR) out += "\r";
+    if (appendLF) out += "\n";
+
+    // IMPORTANT: begin waiting BEFORE writing, to avoid missing very fast echoes
+    const p = beginCommand(name, null, matchFn, timeoutMsOverride);
+
+    await enqueueWrite(out);
+    return await p;
+  }
+
+  /**
+   * Backwards-compatible exact echo match (no CR/LF mismatch):
+   * waits for a frame that includes the clean frame string.
+   */
+  async function sendFrameAndWaitEcho(frame, { name = "Send frame", timeoutMsOverride = null } = {}) {
+    const clean = String(frame).trim();
+    return await sendFrameAndWait(
+      clean,
+      (fr) => fr.includes(clean),
+      { name, timeoutMsOverride }
+    );
+  }
+
   return {
     // feed this from BLE notify / serial read loops
     onTextChunk,
 
     // used by app logic
     send,
+    sendFrameAndWait,
+    sendFrameAndWaitEcho,
     resetRx,
 
     // expose helpers used elsewhere
