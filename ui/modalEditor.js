@@ -18,9 +18,12 @@ export function createModalEditor(els, {
     if (!row) return;
 
     lastFocusEl = document.activeElement;
-    editingMode = (mode === "groups") ? "groups" : "tasks";
+
+    // ✅ IMPORTANT: don't force mode to tasks/groups only
+    editingMode = String(mode || "tasks");
     editingRealIndex = realIndex;
-    editingHeaders = getHeaders(editingMode);
+
+    editingHeaders = getHeaders(editingMode) || [];
     editingInputs = [];
 
     els.modalTitle.textContent = "Edit Row";

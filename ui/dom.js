@@ -49,6 +49,11 @@ export function getEls() {
     taglistMeta: document.getElementById("taglistMeta"),
     taglistHead: document.getElementById("taglistHead"),
     taglistBody: document.getElementById("taglistBody"),
+    useDeviceAsDraftBtn: document.getElementById("useDeviceAsDraftBtn"),
+    taglistUploadMode: document.getElementById("taglistUploadMode"),
+    addTagRowBtn: document.getElementById("addTagRowBtn"),
+
+
 
     // Alerts UI
     syncAlertsBtn: document.getElementById("syncAlertsBtn"),
@@ -60,6 +65,9 @@ export function getEls() {
     alertsMeta: document.getElementById("alertsMeta"),
     alertsHead: document.getElementById("alertsHead"),
     alertsBody: document.getElementById("alertsBody"),
+    addAlertRowBtn: document.getElementById("addAlertRowBtn"),
+    useAlertsAsDraftBtn: document.getElementById("useAlertsAsDraftBtn"),
+    alertsUploadMode: document.getElementById("alertsUploadMode"),
 
 
     // modal

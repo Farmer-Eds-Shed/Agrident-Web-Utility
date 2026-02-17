@@ -59,10 +59,14 @@ let groupRows = [];
 
 let preferGroupX = true;
 
-let tagRows = [];          // [{eid, vid, alertNo}]
-let tagRowsLoaded = [];    // from CSV
-let alertRows = [];        // [{alertNo, alertText}]
-let alertRowsLoaded = [];  // from CSV
+let tagDeviceRows = [];   // last synced from wand
+let tagDraftRows = [];    // what user edits / exports / uploads
+let tagDraftSource = "none"; // "device" | "csv" | "none"
+
+let alertDeviceRows = [];   // last synced from wand
+let alertDraftRows = [];    // what user edits / exports / uploads
+let alertDraftSource = "none"; // "device" | "csv" | "none"
+
 
 // -----------------------
 // Transport + Session
@@ -106,20 +110,28 @@ els.tabTaglistBtn?.addEventListener("click", () => tabs.setActiveTab("taglist"))
 // -----------------------
 const editor = createModalEditor(els, {
   getRow: (mode, idx) => {
-    if (mode === "taglist") return [tagRows[idx]?.eid ?? "", tagRows[idx]?.vid ?? "", tagRows[idx]?.alertNo ?? "0"];
-    if (mode === "alerts") return [alertRows[idx]?.alertNo ?? "", alertRows[idx]?.alertText ?? ""];
+    if (mode === "taglist") {
+      const r = tagDraftRows[idx] || {};
+      return [r.eid ?? "", r.vid ?? "", r.alertNo ?? "0"];
+    }
+    if (mode === "alerts") {
+      const r = alertDraftRows[idx] || {};
+      return [r.alertNo ?? "", r.alertText ?? ""];
+    }
+
     return mode === "groups" ? groupRows[idx] : taskRows[idx];
   },
 
   setRow: (mode, idx, updated) => {
     if (mode === "taglist") {
-      tagRows[idx] = { eid: updated[0] ?? "", vid: updated[1] ?? "", alertNo: updated[2] ?? "0" };
+      tagDraftRows[idx] = { eid: updated[0] ?? "", vid: updated[1] ?? "", alertNo: updated[2] ?? "0" };
       return;
     }
     if (mode === "alerts") {
-      alertRows[idx] = { alertNo: updated[0] ?? "", alertText: updated[1] ?? "" };
+      alertDraftRows[idx] = { alertNo: updated[0] ?? "", alertText: updated[1] ?? "" };
       return;
     }
+
 
     // existing tasks/groups logic stays as-is...
     const headers = mode === "groups" ? getGroupHeaders(groupHeaders, groupRows) : getTaskHeaders(taskHeaders, taskRows);
@@ -129,8 +141,8 @@ const editor = createModalEditor(els, {
   },
 
   deleteRow: (mode, idx) => {
-    if (mode === "taglist") { tagRows.splice(idx, 1); return; }
-    if (mode === "alerts") { alertRows.splice(idx, 1); return; }
+    if (mode === "taglist") { tagDraftRows.splice(idx, 1); return; }
+    if (mode === "alerts") { alertDraftRows.splice(idx, 1); return; }
     if (mode === "groups") groupRows.splice(idx, 1);
     else taskRows.splice(idx, 1);
   },
@@ -142,8 +154,8 @@ const editor = createModalEditor(els, {
   },
 
   getSubtitle: (mode, realIndex) => {
-    if (mode === "taglist") return `Taglist — Row ${realIndex + 1}`;
-    if (mode === "alerts") return `Alerts — Row ${realIndex + 1}`;
+    if (mode === "taglist") return `Taglist Draft — Row ${realIndex + 1}`;
+    if (mode === "alerts") return `Alerts Draft — Row ${realIndex + 1}`;
     // existing...
     if (mode === "groups") {
       const g = selectedGroup;
@@ -161,6 +173,15 @@ const editor = createModalEditor(els, {
     else rerenderTasks();
   },
 });
+
+
+// EID Helper for merging device and draft taglists, prioritizing draft changes
+function mergeTagsByEid(deviceRows, draftRows) {
+  const map = new Map();
+  for (const r of (deviceRows || [])) map.set(r.eid, { ...r });
+  for (const r of (draftRows || [])) map.set(r.eid, { ...r }); // draft overrides
+  return [...map.values()];
+}
 
 
 // -----------------------
@@ -234,72 +255,109 @@ function rerenderGroups() {
 function rerenderTaglist() {
   const isConn = !!transport?.isConnected;
 
-  // enable buttons
+  const mode = (els.taglistUploadMode?.value || "merge");
+
+  // Enable controls
   els.syncTaglistBtn.disabled = !isConn;
   els.eraseTaglistBtn.disabled = !isConn;
-  els.downloadTaglistCsvBtn.disabled = !(isConn && tagRows.length);
+
+  els.useDeviceAsDraftBtn.disabled = !(isConn && tagDeviceRows.length);
 
   els.taglistFile.disabled = !isConn;
-  els.uploadTaglistBtn.disabled = !(isConn && tagRowsLoaded.length);
+  els.taglistUploadMode.disabled = !isConn;
+
+  els.addTagRowBtn.disabled = !isConn;
+
+
+  const hasDraft = tagDraftRows.length > 0;
+  els.downloadTaglistCsvBtn.disabled = !(isConn && hasDraft);
+  els.uploadTaglistBtn.disabled = !(isConn && hasDraft);
 
   const q = (els.taglistFilter?.value || "").trim().toLowerCase();
-  els.taglistFilter.disabled = !(isConn && tagRows.length);
+  els.taglistFilter.disabled = !(isConn && hasDraft);
 
-  let view = tagRows.map((r, i) => ({ r, realIndex: i }));
+  let view = tagDraftRows.map((r, i) => ({ r, realIndex: i }));
   if (q) {
-    view = view.filter(({ r }) => `${r.eid} ${r.vid} ${r.alertNo}`.toLowerCase().includes(q));
+    view = view.filter(({ r }) =>
+      `${r.eid} ${r.vid} ${r.alertNo}`.toLowerCase().includes(q)
+    );
   }
 
+  const sourceLabel =
+    tagDraftSource === "device" ? "Draft from Device" :
+    tagDraftSource === "csv" ? "Draft from CSV" :
+    "No Draft";
+
+  els.taglistMeta.textContent =
+    `${sourceLabel} — ${tagDraftRows.length} row(s). ` +
+    `Device snapshot — ${tagDeviceRows.length} row(s). ` +
+    `Upload mode: ${mode.toUpperCase()}.`;
+
   renderTaglistPreview(els, {
-    rows: tagRows,
+    rows: tagDraftRows,
     view,
     isConnected: isConn,
     onEditRow: (idx) => editor.openEditor("taglist", idx),
     onDeleteRow: (idx) => {
-      if (!confirm(`Delete tag row #${idx + 1}?`)) return;
-      tagRows.splice(idx, 1);
+      if (!confirm(`Delete draft row #${idx + 1}?`)) return;
+      tagDraftRows.splice(idx, 1);
       rerenderTaglist();
     },
-    statusText: tagRowsLoaded.length
-      ? `Taglist — ${tagRows.length} on device. ${tagRowsLoaded.length} loaded from CSV (ready to upload).`
-      : `Taglist — ${tagRows.length} on device.`,
   });
 }
+
 
 function rerenderAlerts() {
   const isConn = !!transport?.isConnected;
 
+  const mode = (els.alertsUploadMode?.value || "append");
+
   els.syncAlertsBtn.disabled = !isConn;
   els.eraseAlertsBtn.disabled = !isConn;
-  els.downloadAlertsCsvBtn.disabled = !(isConn && alertRows.length);
+
+  els.useAlertsAsDraftBtn.disabled = !(isConn && alertDeviceRows.length);
 
   els.alertsFile.disabled = !isConn;
-  els.uploadAlertsBtn.disabled = !(isConn && alertRowsLoaded.length);
+  els.alertsUploadMode.disabled = !isConn;
+
+  els.addAlertRowBtn.disabled = !isConn;
+
+  const hasDraft = alertDraftRows.length > 0;
+  els.downloadAlertsCsvBtn.disabled = !(isConn && hasDraft);
+  els.uploadAlertsBtn.disabled = !(isConn && hasDraft);
 
   const q = (els.alertsFilter?.value || "").trim().toLowerCase();
-  els.alertsFilter.disabled = !(isConn && alertRows.length);
+  els.alertsFilter.disabled = !(isConn && hasDraft);
 
-  let view = alertRows.map((r, i) => ({ r, realIndex: i }));
+  let view = alertDraftRows.map((r, i) => ({ r, realIndex: i }));
   if (q) {
-    view = view.filter(({ r }) => `${r.alertNo} ${r.alertText}`.toLowerCase().includes(q));
+    view = view.filter(({ r }) =>
+      `${r.alertNo} ${r.alertText}`.toLowerCase().includes(q)
+    );
   }
 
+  const sourceLabel =
+    alertDraftSource === "device" ? "Draft from Device" :
+    alertDraftSource === "csv" ? "Draft from CSV" :
+    "No Draft";
+
+  els.alertsMeta.textContent =
+    `${sourceLabel} — ${alertDraftRows.length} row(s). ` +
+    `Device snapshot — ${alertDeviceRows.length} row(s). ` +
+    `Upload mode: ${mode.toUpperCase()}.`;
+
   renderAlertsPreview(els, {
-    rows: alertRows,
+    rows: alertDraftRows,
     view,
     isConnected: isConn,
     onEditRow: (idx) => editor.openEditor("alerts", idx),
     onDeleteRow: (idx) => {
-      if (!confirm(`Delete alert row #${idx + 1}?`)) return;
-      alertRows.splice(idx, 1);
+      if (!confirm(`Delete draft row #${idx + 1}?`)) return;
+      alertDraftRows.splice(idx, 1);
       rerenderAlerts();
     },
-    statusText: alertRowsLoaded.length
-      ? `Alerts — ${alertRows.length} on device. ${alertRowsLoaded.length} loaded from CSV (ready to upload).`
-      : `Alerts — ${alertRows.length} on device.`,
   });
 }
-
 
 
 // -----------------------
@@ -313,8 +371,8 @@ async function connect() {
     // reset state
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
-    tagRows = []; tagRowsLoaded = [];
-    alertRows = []; alertRowsLoaded = [];
+    tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
+    alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
 
     rerenderTasks();
     rerenderGroups();
@@ -383,11 +441,8 @@ async function cleanup() {
   tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
   groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
 
-  tagRows = []; tagRowsLoaded = [];
-  tagRowsLoaded = [];
-  
-  alertRows = [];
-  alertRowsLoaded = [];
+  tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
+  alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
 
   rerenderTasks();
   rerenderGroups();
@@ -507,7 +562,11 @@ els.syncTaglistBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
     els.syncTaglistBtn.disabled = true;
-    tagRows = await fetchTaglist(session);
+
+    tagDeviceRows = await fetchTaglist(session);
+
+    // Do NOT overwrite draft automatically; user decides via "Use Device as Draft"
+    rerenderTaglist();
   } catch (e) {
     alert(`Failed to sync taglist: ${e?.message || e}`);
   } finally {
@@ -516,13 +575,16 @@ els.syncTaglistBtn.addEventListener("click", async () => {
   }
 });
 
+
 els.eraseTaglistBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
     if (!confirm("Erase ALL taglist entries on the wand?")) return;
     els.eraseTaglistBtn.disabled = true;
     await eraseTaglist(session);
-    tagRows = [];
+    tagDeviceRows = [];
+    tagDraftRows = [];
+    tagDraftSource = "none";
   } catch (e) {
     alert(`Failed to erase taglist: ${e?.message || e}`);
   } finally {
@@ -531,11 +593,20 @@ els.eraseTaglistBtn.addEventListener("click", async () => {
   }
 });
 
+els.useDeviceAsDraftBtn.addEventListener("click", () => {
+  tagDraftRows = tagDeviceRows.map((r) => ({ ...r }));
+  tagDraftSource = "device";
+  if (els.taglistFilter) els.taglistFilter.value = "";
+  rerenderTaglist();
+});
+
+
 els.downloadTaglistCsvBtn.addEventListener("click", () => {
   const headers = TAGLIST_HEADERS;
-  const rows = tagRows.map((r) => [r.eid ?? "", r.vid ?? "", r.alertNo ?? "0"]);
-  downloadText(`taglist.csv`, toCSV(headers, rows));
+  const rows = tagDraftRows.map((r) => [r.eid ?? "", r.vid ?? "", r.alertNo ?? "0"]);
+  downloadText("taglist_draft.csv", toCSV(headers, rows));
 });
+
 
 els.taglistFile.addEventListener("change", async () => {
   const f = els.taglistFile.files?.[0];
@@ -544,7 +615,6 @@ els.taglistFile.addEventListener("change", async () => {
   const text = await f.text();
   const rows = parseCSV(text);
 
-  // Expect headers row: EID,VID,AlertNo (case-insensitive)
   const head = (rows[0] || []).map((s) => s.toLowerCase());
   const iE = head.indexOf("eid");
   const iV = head.indexOf("vid");
@@ -556,35 +626,60 @@ els.taglistFile.addEventListener("change", async () => {
     alertNo: r[iA] ?? r[2] ?? "0",
   })).filter((r) => String(r.eid).trim() !== "");
 
-  tagRowsLoaded = data;
+  tagDraftRows = data;
+  tagDraftSource = "csv";
+  if (els.taglistFilter) els.taglistFilter.value = "";
   rerenderTaglist();
 });
+
 
 els.uploadTaglistBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
-    if (!tagRowsLoaded.length) return;
+    if (!tagDraftRows.length) return;
 
-    if (!confirm(`Upload ${tagRowsLoaded.length} tags to the wand?\n\n(They will be appended; existing taglist stays unless you erase first.)`)) {
-      return;
+    const mode = (els.taglistUploadMode?.value || "append");
+
+    if (mode === "replace") {
+      if (!confirm(
+        `REPLACE will ERASE the wand taglist, then upload ${tagDraftRows.length} draft rows.\n\nProceed?`
+      )) return;
+
+      els.taglistMeta.textContent = "Erasing device taglist…";
+      await eraseTaglist(session);
+    } else {
+      // append
+      if (!confirm(
+        `APPEND will add ${tagDraftRows.length} rows to the existing wand taglist.\n` +
+        `This can create duplicates if EIDs already exist.\n\nProceed?`
+      )) return;
     }
 
     els.uploadTaglistBtn.disabled = true;
 
-    await uploadTaglist(session, tagRowsLoaded, {
+    await uploadTaglist(session, tagDraftRows, {
       onProgress: ({ i, total }) => {
-        els.taglistMeta.textContent = `Uploading taglist… ${i}/${total}`;
+        els.taglistMeta.textContent = `Uploading (${mode})… ${i}/${total}`;
       }
     });
 
-    els.taglistMeta.textContent = `Upload complete. (Tip: re-sync taglist to confirm.)`;
+    els.taglistMeta.textContent = `Upload complete (${mode}). Tip: Sync Device to confirm.`;
   } catch (e) {
     alert(`Failed to upload taglist: ${e?.message || e}`);
   } finally {
-    els.uploadTaglistBtn.disabled = !(transport?.isConnected && tagRowsLoaded.length);
     rerenderTaglist();
   }
 });
+
+els.addTagRowBtn.addEventListener("click", () => {
+  // add a blank-ish draft row and open editor
+  tagDraftRows.push({ eid: "", vid: "", alertNo: "0" });
+  tagDraftSource = tagDraftSource === "none" ? "device" : tagDraftSource; // whatever label you prefer
+  rerenderTaglist();
+  editor.openEditor("taglist", tagDraftRows.length - 1);
+});
+
+
 
 // Filter typing
 els.taglistFilter?.addEventListener("input", () => rerenderTaglist());
@@ -595,7 +690,8 @@ els.syncAlertsBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
     els.syncAlertsBtn.disabled = true;
-    alertRows = await fetchAlerts(session);
+
+    alertDeviceRows = await fetchAlerts(session);
   } catch (e) {
     alert(`Failed to sync alerts: ${e?.message || e}`);
   } finally {
@@ -604,13 +700,24 @@ els.syncAlertsBtn.addEventListener("click", async () => {
   }
 });
 
+els.useAlertsAsDraftBtn.addEventListener("click", () => {
+  alertDraftRows = alertDeviceRows.map((r) => ({ ...r }));
+  alertDraftSource = "device";
+  if (els.alertsFilter) els.alertsFilter.value = "";
+  rerenderAlerts();
+});
+
 els.eraseAlertsBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
     if (!confirm("Erase ALL alert strings on the wand?")) return;
+
     els.eraseAlertsBtn.disabled = true;
     await eraseAlerts(session);
-    alertRows = [];
+
+    alertDeviceRows = [];
+    alertDraftRows = [];
+    alertDraftSource = "none";
   } catch (e) {
     alert(`Failed to erase alerts: ${e?.message || e}`);
   } finally {
@@ -618,6 +725,7 @@ els.eraseAlertsBtn.addEventListener("click", async () => {
     rerenderAlerts();
   }
 });
+
 
 els.downloadAlertsCsvBtn.addEventListener("click", () => {
   const headers = ALERT_HEADERS;
@@ -641,35 +749,65 @@ els.alertsFile.addEventListener("change", async () => {
     alertText: r[iT] ?? r[1] ?? "",
   })).filter((r) => String(r.alertNo).trim() !== "");
 
-  alertRowsLoaded = data;
+  alertDraftRows = data;
+  alertDraftSource = "csv";
+  if (els.alertsFilter) els.alertsFilter.value = "";
   rerenderAlerts();
 });
+
 
 els.uploadAlertsBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
-    if (!alertRowsLoaded.length) return;
+    if (!alertDraftRows.length) return;
 
-    if (!confirm(`Upload ${alertRowsLoaded.length} alert strings to the wand?`)) return;
+    const mode = (els.alertsUploadMode?.value || "append");
+
+    if (mode === "replace") {
+      if (!confirm(
+        `REPLACE will ERASE all device alerts, then upload ${alertDraftRows.length} draft rows.\n\nProceed?`
+      )) return;
+
+      els.alertsMeta.textContent = "Erasing device alerts…";
+      await eraseAlerts(session);
+    } else {
+      // append
+      if (!confirm(
+        `APPEND will add ${alertDraftRows.length} alert strings to the end of the device alerts list.\n\nProceed?`
+      )) return;
+    }
 
     els.uploadAlertsBtn.disabled = true;
 
-    await uploadAlerts(session, alertRowsLoaded, {
+    await uploadAlerts(session, alertDraftRows, {
       onProgress: ({ i, total }) => {
-        els.alertsMeta.textContent = `Uploading alerts… ${i}/${total}`;
+        els.alertsMeta.textContent = `Uploading alerts (${mode})… ${i}/${total}`;
       }
     });
 
-    els.alertsMeta.textContent = `Upload complete. (Tip: re-sync alerts to confirm.)`;
+    els.alertsMeta.textContent = `Upload complete (${mode}). Tip: Sync Device to confirm.`;
   } catch (e) {
     alert(`Failed to upload alerts: ${e?.message || e}`);
   } finally {
-    els.uploadAlertsBtn.disabled = !(transport?.isConnected && alertRowsLoaded.length);
     rerenderAlerts();
   }
 });
 
+
 els.alertsFilter?.addEventListener("input", () => rerenderAlerts());
+
+els.downloadAlertsCsvBtn.addEventListener("click", () => {
+  const headers = ALERT_HEADERS;
+  const rows = alertDraftRows.map((r) => [r.alertNo ?? "", r.alertText ?? ""]);
+  downloadText("alerts_draft.csv", toCSV(headers, rows));
+});
+
+els.addAlertRowBtn.addEventListener("click", () => {
+  alertDraftRows.push({ alertNo: "", alertText: "" });
+  alertDraftSource = alertDraftSource === "none" ? "device" : alertDraftSource;
+  rerenderAlerts();
+  editor.openEditor("alerts", alertDraftRows.length - 1);
+});
 
 
 // Download CSVs

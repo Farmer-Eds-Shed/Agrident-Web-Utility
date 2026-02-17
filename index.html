@@ -120,20 +120,28 @@
   <div id="panelTaglist" style="display:none;">
     <div class="card">
       <div class="row gap10 mb10">
-        <button class="btn" id="syncTaglistBtn" disabled>Sync Taglist</button>
-        <button class="btn btnDanger" id="eraseTaglistBtn" disabled>Erase Taglist</button>
+        <button class="btn" id="syncTaglistBtn" disabled>Sync Device</button>
+        <button class="btn" id="useDeviceAsDraftBtn" disabled>Use Device as Draft</button>
 
-        <label class="muted" for="taglistFilter">Filter:</label>
-        <input id="taglistFilter" type="text" placeholder="Filter tags…" disabled>
+        <button class="btn btnDanger" id="eraseTaglistBtn" disabled>Erase Device Taglist</button>
 
-        <button class="btn" id="downloadTaglistCsvBtn" disabled>Download Taglist CSV</button>
+        <label class="muted" for="taglistUploadMode">Upload mode:</label>
+        <select id="taglistUploadMode" disabled>
+                    <option value="append">Append</option>
+          <option value="replace">Replace (erase then upload)</option>
+        </select>
       </div>
 
       <div class="row gap10 mb10">
-        <label class="muted" for="taglistFile">Load CSV:</label>
+        <label class="muted" for="taglistFile">Load CSV as Draft:</label>
         <input id="taglistFile" type="file" accept=".csv,text/csv" disabled>
 
-        <button class="btn btnPrimary" id="uploadTaglistBtn" disabled>Upload CSV to Wand</button>
+        <button class="btn" id="downloadTaglistCsvBtn" disabled>Export Draft CSV</button>
+        <button class="btn" id="addTagRowBtn" disabled>Add Row</button>
+        <button class="btn btnPrimary" id="uploadTaglistBtn" disabled>Upload Draft → Wand</button>
+
+        <label class="muted" for="taglistFilter">Filter:</label>
+        <input id="taglistFilter" type="text" placeholder="Filter draft…" disabled>
       </div>
 
       <div class="muted" id="taglistMeta">Taglist — not loaded.</div>
@@ -146,23 +154,33 @@
       </div>
     </div>
 
+
     <div class="card">
       <div class="row gap10 mb10">
-        <button class="btn" id="syncAlertsBtn" disabled>Sync Alerts</button>
-        <button class="btn btnDanger" id="eraseAlertsBtn" disabled>Erase Alerts</button>
+        <button class="btn" id="syncAlertsBtn" disabled>Sync Device</button>
+        <button class="btn" id="useAlertsAsDraftBtn" disabled>Use Device as Draft</button>
+
+        <button class="btn btnDanger" id="eraseAlertsBtn" disabled>Erase Device Alerts</button>
+
+        <label class="muted" for="alertsUploadMode">Upload mode:</label>
+        <select id="alertsUploadMode" disabled>
+          <option value="append" selected>Append (recommended)</option>
+          <option value="replace">Replace (erase then upload)</option>
+        </select>
 
         <label class="muted" for="alertsFilter">Filter:</label>
-        <input id="alertsFilter" type="text" placeholder="Filter alerts…" disabled>
-
-        <button class="btn" id="downloadAlertsCsvBtn" disabled>Download Alerts CSV</button>
+        <input id="alertsFilter" type="text" placeholder="Filter draft…" disabled>
       </div>
 
       <div class="row gap10 mb10">
-        <label class="muted" for="alertsFile">Load CSV:</label>
+        <label class="muted" for="alertsFile">Load CSV as Draft:</label>
         <input id="alertsFile" type="file" accept=".csv,text/csv" disabled>
 
-        <button class="btn btnPrimary" id="uploadAlertsBtn" disabled>Upload CSV to Wand</button>
+        <button class="btn" id="downloadAlertsCsvBtn" disabled>Export Draft CSV</button>
+        <button class="btn" id="addAlertRowBtn" disabled>Add Row</button>
+        <button class="btn btnPrimary" id="uploadAlertsBtn" disabled>Upload Draft → Wand</button>
       </div>
+
 
       <div class="muted" id="alertsMeta">Alerts — not loaded.</div>
 
