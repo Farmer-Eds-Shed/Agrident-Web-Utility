@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -8,8 +9,12 @@
 </head>
 
 <body>
-  <h1>Agrident Web Utility</h1>
-  <div class="muted">Agrident/Allflex Data Downloader</div>
+  <header class="appHeader">
+    <div class="appTitleWrap">
+      <h1 class="appTitle">Agrident Web Utility</h1>
+      <div class="muted appSubtitle">Agrident/Allflex Data Downloader</div>
+    </div>
+  </header>
 
   <!-- Connection / Status -->
   <div class="card cardCompact" id="connCard">
@@ -22,14 +27,16 @@
       <span class="muted mlAuto" id="connHint"></span>
     </div>
 
-    <div class="btnRow mt8">
-      <button id="connectBtn">Connect</button>
-      <button id="disconnectBtn" disabled>Disconnect</button>
-    </div>
+    <div class="connLiveRow mt8" id="connLiveRow" aria-live="polite">
+      <div class="connLeft">
+        <span id="status" class="pill bad">Disconnected</span>
+        <span id="busy" class="pill">idle</span>
+      </div>
 
-    <div class="pillRow mt8">
-      <span id="status" class="pill bad">Disconnected</span>
-      <span id="busy" class="pill">idle</span>
+      <div class="connRight">
+        <button id="connectBtn" class="btn btnPrimary">Connect</button>
+        <button id="disconnectBtn" class="btn btnDanger" disabled title="Disconnect">Disconnect</button>
+      </div>
     </div>
 
     <details id="connMore" class="connMore">
@@ -41,66 +48,66 @@
     </details>
   </div>
 
-  <!-- Tabs -->
-  <div class="card">
-   <div class="row gap10 mb10">
-      <button class="btn btnSmall btnPrimary" id="tabGroupsBtn" type="button">Groups</button>
-      <button class="btn btnSmall" id="tabTasksBtn" type="button">Tasks</button>
-      <button class="btn btnSmall" id="tabTaglistBtn" type="button">Taglist</button>
-      <button class="btn btnSmall" id="tabSettingsBtn" type="button">Settings</button>
-      <span class="muted" style="margin-left:auto;" id="activeTabHint">Groups</span>
+  <!-- Tabs / Navigation -->
+  <nav class="tabBar" aria-label="Sections">
+    <div class="tabBarInner">
+      <button class="btn tabBtn active" id="tabGroupsBtn" type="button">
+        <span class="tabIcon" aria-hidden="true">👥</span>
+        <span class="tabLabel">Groups</span>
+      </button>
+      <button class="btn tabBtn" id="tabTasksBtn" type="button">
+        <span class="tabIcon" aria-hidden="true">🧾</span>
+        <span class="tabLabel">Tasks</span>
+      </button>
+      <button class="btn tabBtn" id="tabTaglistBtn" type="button">
+        <span class="tabIcon" aria-hidden="true">🏷️</span>
+        <span class="tabLabel">Taglist</span>
+      </button>
+      <button class="btn tabBtn" id="tabSettingsBtn" type="button">
+        <span class="tabIcon" aria-hidden="true">⚙️</span>
+        <span class="tabLabel">Settings</span>
+      </button>
+
+      <span class="muted tabHint" id="activeTabHint">Groups</span>
     </div>
+  </nav>
 
-    <!-- Tasks panel -->
-    <div id="panelTasks" style="display:none;">
-      <div class="row gap10 mb10">
-        <button class="btn btnSmall" id="syncTasksBtn" disabled>Sync Tasks</button>
-
-        <label class="muted" for="taskSelect">Task:</label>
-        <select id="taskSelect" disabled>
-          <option value="">(connect to load tasks)</option>
-        </select>
-
-        <label class="muted" for="taskFilter">Search:</label>
-        <input id="taskFilter" type="text" placeholder="Search…" disabled>
-
-        <button id="downloadCsvBtn" disabled>Download CSV</button>
-      </div>
-
-      <h3 class="mb6">Preview</h3>
-      <div class="muted" id="previewMeta">No task selected.</div>
-
-      <div class="scroll scrollTall">
-        <table>
-          <thead><tr id="previewHead"></tr></thead>
-          <tbody id="previewBody"></tbody>
-        </table>
-      </div>
-    </div>
+  <main class="appMain">
 
     <!-- Groups panel -->
-    <div id="panelGroups">
-      <div class="row gap10 mb10">
-        <button class="btn btnSmall" id="syncGroupsBtn" disabled>Sync Groups</button>
+    <section id="panelGroups" class="card panelCard">
+      <div class="toolbar">
+        <div class="toolbarPrimary">
+          <button class="btn btnPrimary" id="syncGroupsBtn" disabled>Sync Groups</button>
+          <button class="btn" id="downloadGroupCsvBtn" disabled>Download CSV</button>
+        </div>
 
-        <label class="muted" for="groupSelect">Group:</label>
-        <select id="groupSelect" disabled>
-          <option value="">(sync groups)</option>
-        </select>
+        <!-- Controls row: dropdown + search side-by-side on mobile -->
+        <div class="toolbarControls">
+          <div class="fieldInline">
+            <label class="muted" for="groupSelect">Group</label>
+            <select id="groupSelect" disabled>
+              <option value="">(sync groups)</option>
+            </select>
+          </div>
 
-        <label class="muted" for="groupFilter">Search:</label>
-        <input id="groupFilter" type="text" placeholder="Search…" disabled>
+          <div class="fieldInline">
+            <label class="muted" for="groupFilter">Search</label>
+            <input id="groupFilter" type="text" placeholder="Search…" disabled>
+          </div>
 
-        <label class="muted inlineCheck">
-          <input type="checkbox" id="preferGroupX" checked />
-          EID + Weight
-        </label>
-
-        <button id="downloadGroupCsvBtn" disabled>Download Group CSV</button>
+          <!-- Checkbox moved INTO the controls row so it can span both columns on mobile -->
+          <label class="muted inlineCheck controlSpan2">
+            <input type="checkbox" id="preferGroupX" checked />
+            EID + Weight
+          </label>
+        </div>
       </div>
 
-      <h3 class="mb6">Preview</h3>
-      <div class="muted" id="groupPreviewMeta">No group selected.</div>
+      <div class="panelHeader">
+        <h3 class="mb6">Preview</h3>
+        <div class="muted" id="groupPreviewMeta">No group selected.</div>
+      </div>
 
       <div class="scroll scrollTall">
         <table>
@@ -110,118 +117,185 @@
       </div>
 
       <div class="muted mt8" id="groupsSyncedAt"></div>
-    </div>
-  </div>
+    </section>
 
+    <!-- Tasks panel -->
+    <section id="panelTasks" class="card panelCard" style="display:none;">
+      <div class="toolbar">
+        <div class="toolbarPrimary">
+          <button class="btn btnPrimary" id="syncTasksBtn" disabled>Sync Tasks</button>
+          <button class="btn" id="downloadCsvBtn" disabled>Download CSV</button>
+        </div>
 
-  <!-- Taglist & Alerts panel -->
-  <div id="panelTaglist" style="display:none;">
-    <div class="card">
-      <div class="row gap10 mb10">
-        <button class="btn" id="syncTaglistBtn" disabled>Sync Device</button>
-        <button class="btn" id="useDeviceAsDraftBtn" disabled>Use Device as Draft</button>
+        <div class="toolbarControls">
+          <div class="fieldInline">
+            <label class="muted" for="taskSelect">Task</label>
+            <select id="taskSelect" disabled>
+              <option value="">(connect to load tasks)</option>
+            </select>
+          </div>
 
-        <button class="btn btnDanger" id="eraseTaglistBtn" disabled>Erase Device Taglist</button>
-
-        <label class="muted" for="taglistUploadMode">Upload mode:</label>
-        <select id="taglistUploadMode" disabled>
-          <option value="append" selected>Append</option>
-          <option value="replace">Replace (erase then upload)</option>
-        </select>
+          <div class="fieldInline">
+            <label class="muted" for="taskFilter">Search</label>
+            <input id="taskFilter" type="text" placeholder="Search…" disabled>
+          </div>
+        </div>
       </div>
 
-      <div class="row gap10 mb10">
-        <label class="muted" for="taglistFile">Load CSV as Draft:</label>
-        <input id="taglistFile" type="file" accept=".csv,text/csv" disabled>
-
-        <button class="btn" id="downloadTaglistCsvBtn" disabled>Export Draft CSV</button>
-        <button class="btn" id="addTagRowBtn" disabled>Add Row</button>
-        <button class="btn btnPrimary" id="uploadTaglistBtn" disabled>Upload Draft → Wand</button>
-
-        <label class="muted" for="taglistFilter">Filter:</label>
-        <input id="taglistFilter" type="text" placeholder="Filter draft…" disabled>
+      <div class="panelHeader">
+        <h3 class="mb6">Preview</h3>
+        <div class="muted" id="previewMeta">No task selected.</div>
       </div>
-
-      <div class="muted" id="taglistMeta">Taglist — not loaded.</div>
 
       <div class="scroll scrollTall">
         <table>
-          <thead><tr id="taglistHead"></tr></thead>
-          <tbody id="taglistBody"></tbody>
+          <thead><tr id="previewHead"></tr></thead>
+          <tbody id="previewBody"></tbody>
         </table>
       </div>
-    </div>
+    </section>
 
+    <!-- Taglist & Alerts panel -->
+    <section id="panelTaglist" class="panelCard" style="display:none;">
+      <!-- Taglist -->
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbarPrimary">
+            <button class="btn btnPrimary" id="syncTaglistBtn" disabled>Sync Device</button>
+            <button class="btn" id="useDeviceAsDraftBtn" disabled>Use Device as Draft</button>
+            <button class="btn btnDanger" id="eraseTaglistBtn" disabled>Erase Device Taglist</button>
+          </div>
 
-    <div class="card">
-      <div class="row gap10 mb10">
-        <button class="btn" id="syncAlertsBtn" disabled>Sync Device</button>
-        <button class="btn" id="useAlertsAsDraftBtn" disabled>Use Device as Draft</button>
+          <div class="toolbarControls">
+            <div class="fieldInline">
+              <label class="muted" for="taglistUploadMode">Upload mode</label>
+              <select id="taglistUploadMode" disabled>
+                <option value="append" selected>Append</option>
+                <option value="replace">Replace (erase then upload)</option>
+              </select>
+            </div>
 
-        <button class="btn btnDanger" id="eraseAlertsBtn" disabled>Erase Device Alerts</button>
+            <div class="fieldInline">
+              <label class="muted" for="taglistFilter">Filter</label>
+              <input id="taglistFilter" type="text" placeholder="Filter draft…" disabled>
+            </div>
+          </div>
 
-        <label class="muted" for="alertsUploadMode">Upload mode:</label>
-        <select id="alertsUploadMode" disabled>
-          <option value="append" selected>Append</option>
-          <option value="replace">Replace (erase then upload)</option>
-        </select>
+          <div class="toolbarControls toolbarControlsWide">
+            <div class="fieldInline">
+              <label class="muted" for="taglistFile">Load CSV as Draft</label>
+              <input id="taglistFile" type="file" accept=".csv,text/csv" disabled>
+            </div>
+          </div>
 
-        <label class="muted" for="alertsFilter">Filter:</label>
-        <input id="alertsFilter" type="text" placeholder="Filter draft…" disabled>
+          <div class="toolbarSecondary">
+            <button class="btn" id="downloadTaglistCsvBtn" disabled>Export Draft CSV</button>
+            <button class="btn" id="addTagRowBtn" disabled>Add Row</button>
+            <button class="btn btnPrimary" id="uploadTaglistBtn" disabled>Upload Draft → Wand</button>
+          </div>
+        </div>
+
+        <div class="muted" id="taglistMeta">Taglist — not loaded.</div>
+
+        <div class="scroll scrollTall">
+          <table>
+            <thead><tr id="taglistHead"></tr></thead>
+            <tbody id="taglistBody"></tbody>
+          </table>
+        </div>
       </div>
 
-      <div class="row gap10 mb10">
-        <label class="muted" for="alertsFile">Load CSV as Draft:</label>
-        <input id="alertsFile" type="file" accept=".csv,text/csv" disabled>
+      <!-- Alerts -->
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbarPrimary">
+            <button class="btn btnPrimary" id="syncAlertsBtn" disabled>Sync Device</button>
+            <button class="btn" id="useAlertsAsDraftBtn" disabled>Use Device as Draft</button>
+            <button class="btn btnDanger" id="eraseAlertsBtn" disabled>Erase Device Alerts</button>
+          </div>
 
-        <button class="btn" id="downloadAlertsCsvBtn" disabled>Export Draft CSV</button>
-        <button class="btn" id="addAlertRowBtn" disabled>Add Row</button>
-        <button class="btn btnPrimary" id="uploadAlertsBtn" disabled>Upload Draft → Wand</button>
+          <div class="toolbarControls">
+            <div class="fieldInline">
+              <label class="muted" for="alertsUploadMode">Upload mode</label>
+              <select id="alertsUploadMode" disabled>
+                <option value="append" selected>Append</option>
+                <option value="replace">Replace (erase then upload)</option>
+              </select>
+            </div>
+
+            <div class="fieldInline">
+              <label class="muted" for="alertsFilter">Filter</label>
+              <input id="alertsFilter" type="text" placeholder="Filter draft…" disabled>
+            </div>
+          </div>
+
+          <div class="toolbarControls toolbarControlsWide">
+            <div class="fieldInline">
+              <label class="muted" for="alertsFile">Load CSV as Draft</label>
+              <input id="alertsFile" type="file" accept=".csv,text/csv" disabled>
+            </div>
+          </div>
+
+          <div class="toolbarSecondary">
+            <button class="btn" id="downloadAlertsCsvBtn" disabled>Export Draft CSV</button>
+            <button class="btn" id="addAlertRowBtn" disabled>Add Row</button>
+            <button class="btn btnPrimary" id="uploadAlertsBtn" disabled>Upload Draft → Wand</button>
+          </div>
+        </div>
+
+        <div class="muted" id="alertsMeta">Alerts — not loaded.</div>
+
+        <div class="scroll scrollTall">
+          <table>
+            <thead><tr id="alertsHead"></tr></thead>
+            <tbody id="alertsBody"></tbody>
+          </table>
+        </div>
       </div>
+    </section>
 
-      <div class="muted" id="alertsMeta">Alerts — not loaded.</div>
+    <!-- Settings panel -->
+    <section id="panelSettings" class="panelCard" style="display:none;">
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbarPrimary">
+            <button class="btn btnPrimary" id="syncSettingsBtn" disabled>Sync Device</button>
+            <button class="btn" id="useSettingsAsDraftBtn" disabled>Use Device as Draft</button>
+          </div>
 
-      <div class="scroll scrollTall">
-        <table>
-          <thead><tr id="alertsHead"></tr></thead>
-          <tbody id="alertsBody"></tbody>
-        </table>
+          <div class="toolbarControls">
+            <div class="fieldInline">
+              <label class="muted" for="settingsFilter">Filter</label>
+              <input id="settingsFilter" type="text" placeholder="Filter draft…" disabled>
+            </div>
+
+            <div class="fieldInline">
+              <label class="muted" for="settingsFile">Load JSON as Draft</label>
+              <input id="settingsFile" type="file" accept=".json,application/json" disabled>
+            </div>
+          </div>
+
+          <div class="toolbarSecondary">
+            <button class="btn" id="downloadSettingsBtn" disabled>Export Draft JSON</button>
+            <button class="btn" id="addSettingRowBtn" disabled>Add Row</button>
+            <button class="btn btnPrimary" id="uploadSettingsBtn" disabled>Upload Draft → Wand</button>
+          </div>
+        </div>
+
+        <div class="muted" id="settingsMeta">Settings — not loaded.</div>
+
+        <div class="scroll scrollTall">
+          <table>
+            <thead><tr id="settingsHead"></tr></thead>
+            <tbody id="settingsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="muted mt8" id="settingsInfo"></div>
       </div>
-    </div>
-  </div>
+    </section>
 
-
-  <!-- Settings panel -->
-  <div id="panelSettings" style="display:none;">
-    <div class="card">
-      <div class="row gap10 mb10">
-        <button class="btn" id="syncSettingsBtn" disabled>Sync Device</button>
-        <button class="btn" id="useSettingsAsDraftBtn" disabled>Use Device as Draft</button>
-
-        <label class="muted" for="settingsFile">Load JSON as Draft:</label>
-        <input id="settingsFile" type="file" accept=".json,application/json" disabled>
-
-        <button class="btn" id="downloadSettingsBtn" disabled>Export Draft JSON</button>
-        <button class="btn" id="addSettingRowBtn" disabled>Add Row</button>
-        <button class="btn btnPrimary" id="uploadSettingsBtn" disabled>Upload Draft → Wand</button>
-
-        <label class="muted" for="settingsFilter">Filter:</label>
-        <input id="settingsFilter" type="text" placeholder="Filter draft…" disabled>
-      </div>
-
-      <div class="muted" id="settingsMeta">Settings — not loaded.</div>
-
-      <div class="scroll scrollTall">
-        <table>
-          <thead><tr id="settingsHead"></tr></thead>
-          <tbody id="settingsBody"></tbody>
-        </table>
-      </div>
-
-      <div class="muted mt8" id="settingsInfo"></div>
-    </div>
-  </div>
-
+  </main>
 
   <!-- Modal editor -->
   <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">
@@ -247,6 +321,58 @@
       </div>
     </div>
   </div>
+
+  <!-- Tiny UI helper: auto-collapse connection card when connected + keep tab "active" state -->
+  <script>
+    (function () {
+      const connCard = document.getElementById("connCard");
+      const statusEl = document.getElementById("status");
+      const hint = document.getElementById("activeTabHint");
+      const tabBtns = {
+        groups: document.getElementById("tabGroupsBtn"),
+        tasks: document.getElementById("tabTasksBtn"),
+        taglist: document.getElementById("tabTaglistBtn"),
+        settings: document.getElementById("tabSettingsBtn"),
+      };
+
+      function updateConnCollapsed() {
+        const connected = statusEl && !statusEl.classList.contains("bad") && /connected/i.test(statusEl.textContent || "");
+        connCard && connCard.classList.toggle("connected", !!connected);
+      }
+
+      function updateActiveTabBtn() {
+        const panels = [
+          ["groups", document.getElementById("panelGroups")],
+          ["tasks", document.getElementById("panelTasks")],
+          ["taglist", document.getElementById("panelTaglist")],
+          ["settings", document.getElementById("panelSettings")],
+        ];
+
+        const active = panels.find(([, el]) => el && el.style.display !== "none");
+        const key = active ? active[0] : "groups";
+
+        Object.entries(tabBtns).forEach(([k, b]) => {
+          if (!b) return;
+          b.classList.toggle("active", k === key);
+        });
+
+        if (hint) hint.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+      }
+
+      if (statusEl) {
+        const obs = new MutationObserver(() => updateConnCollapsed());
+        obs.observe(statusEl, { attributes: true, childList: true, subtree: true, characterData: true });
+      }
+      updateConnCollapsed();
+
+      const panelObs = new MutationObserver(() => updateActiveTabBtn());
+      ["panelGroups","panelTasks","panelTaglist","panelSettings"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) panelObs.observe(el, { attributes: true, attributeFilter: ["style","class"] });
+      });
+      updateActiveTabBtn();
+    })();
+  </script>
 
   <script type="module" src="./app.js"></script>
 </body>
