@@ -1,4 +1,5 @@
 // app.js
+// Main app wiring (UI + session + commands)
 
 import { toCSV, downloadText } from "./parsers/csv.js";
 import { formatRow } from "./parsers/format.js";
@@ -32,6 +33,14 @@ import { fetchAlerts, eraseAlerts, uploadAlerts } from "./wand/commands/alerts.j
 import { renderTaglistPreview, TAGLIST_HEADERS } from "./ui/renderTaglist.js";
 import { renderAlertsPreview, ALERT_HEADERS } from "./ui/renderAlerts.js";
 
+import {
+  fetchSettings,
+  applySettings,
+  SETTINGS_HEADERS,
+  SETTINGS_DEFAULT_DEFS,
+  fetchDeviceInfo,
+} from "./wand/commands/settings.js";
+
 
 const SERIAL_BAUD = 9600;
 const APPEND_CR = false;
@@ -42,7 +51,6 @@ const els = getEls();
 // Filters
 const taskFilterEl = document.getElementById("taskFilter");
 const groupFilterEl = document.getElementById("groupFilter");
-
 
 // -----------------------
 // State
@@ -67,6 +75,12 @@ let alertDeviceRows = [];   // last synced from wand
 let alertDraftRows = [];    // what user edits / exports / uploads
 let alertDraftSource = "none"; // "device" | "csv" | "none"
 
+let settingsDeviceRows = [];   // last synced from wand
+let settingsDraftRows = [];    // what user edits / exports / uploads
+let settingsDraftSource = "none"; // "device" | "json" | "none"
+let settingsInfo = null;       // bt/mac versions etc
+
+let sessionBusy = false;
 
 // -----------------------
 // Transport + Session
@@ -79,17 +93,27 @@ function buildSession() {
     transport,
     setBusy: (t) => setBusy(els, t),
     onCommandUIStateChange: (busy) => {
+      sessionBusy = !!busy;
+
+      // connection basics
       els.connectBtn.disabled = true;
       els.disconnectBtn.disabled = false;
       els.connType.disabled = true;
 
+      // tasks
       els.taskSelect.disabled = busy || !(transport?.isConnected && tasks.length);
       els.syncTasksBtn.disabled = busy || !(transport?.isConnected);
       els.downloadCsvBtn.disabled = busy || !(transport?.isConnected && taskRows.length);
 
+      // groups
       els.groupSelect.disabled = busy || !(transport?.isConnected && groups.length);
       els.syncGroupsBtn.disabled = busy || !(transport?.isConnected);
       els.downloadGroupCsvBtn.disabled = busy || !(transport?.isConnected && groupRows.length);
+
+      // keep other panels in sync
+      rerenderTaglist();
+      rerenderAlerts();
+      rerenderSettings();
     },
     timeoutMs: 12000,
     appendCR: APPEND_CR,
@@ -104,6 +128,7 @@ const tabs = createTabs(els, "groups");
 els.tabTasksBtn?.addEventListener("click", () => tabs.setActiveTab("tasks"));
 els.tabGroupsBtn?.addEventListener("click", () => tabs.setActiveTab("groups"));
 els.tabTaglistBtn?.addEventListener("click", () => tabs.setActiveTab("taglist"));
+els.tabSettingsBtn?.addEventListener("click", () => tabs.setActiveTab("settings"));
 
 // -----------------------
 // Modal Editor
@@ -118,6 +143,10 @@ const editor = createModalEditor(els, {
       const r = alertDraftRows[idx] || {};
       return [r.alertNo ?? "", r.alertText ?? ""];
     }
+    if (mode === "settings") {
+      const r = settingsDraftRows[idx] || {};
+      return [r.key ?? "", r.label ?? "", r.value ?? ""];
+    }
 
     return mode === "groups" ? groupRows[idx] : taskRows[idx];
   },
@@ -131,9 +160,17 @@ const editor = createModalEditor(els, {
       alertDraftRows[idx] = { alertNo: updated[0] ?? "", alertText: updated[1] ?? "" };
       return;
     }
+    if (mode === "settings") {
+      const prev = settingsDraftRows[idx] || {};
+      settingsDraftRows[idx] = {
+        ...prev,
+        key: updated[0] ?? "",
+        label: updated[1] ?? "",
+        value: updated[2] ?? "",
+      };
+      return;
+    }
 
-
-    // existing tasks/groups logic stays as-is...
     const headers = mode === "groups" ? getGroupHeaders(groupHeaders, groupRows) : getTaskHeaders(taskHeaders, taskRows);
     const formatted = formatRow(updated, headers);
     if (mode === "groups") groupRows[idx] = formatted;
@@ -143,6 +180,7 @@ const editor = createModalEditor(els, {
   deleteRow: (mode, idx) => {
     if (mode === "taglist") { tagDraftRows.splice(idx, 1); return; }
     if (mode === "alerts") { alertDraftRows.splice(idx, 1); return; }
+    if (mode === "settings") { settingsDraftRows.splice(idx, 1); return; }
     if (mode === "groups") groupRows.splice(idx, 1);
     else taskRows.splice(idx, 1);
   },
@@ -150,13 +188,15 @@ const editor = createModalEditor(els, {
   getHeaders: (mode) => {
     if (mode === "taglist") return TAGLIST_HEADERS;
     if (mode === "alerts") return ALERT_HEADERS;
+    if (mode === "settings") return SETTINGS_HEADERS;
     return mode === "groups" ? getGroupHeaders(groupHeaders, groupRows) : getTaskHeaders(taskHeaders, taskRows);
   },
 
   getSubtitle: (mode, realIndex) => {
     if (mode === "taglist") return `Taglist Draft — Row ${realIndex + 1}`;
     if (mode === "alerts") return `Alerts Draft — Row ${realIndex + 1}`;
-    // existing...
+    if (mode === "settings") return `Settings Draft — Row ${realIndex + 1}`;
+
     if (mode === "groups") {
       const g = selectedGroup;
       return g ? `Group ${g.id}: ${g.name} — Row ${realIndex + 1}` : `Group row ${realIndex + 1}`;
@@ -169,19 +209,11 @@ const editor = createModalEditor(els, {
   onAfterChange: (mode) => {
     if (mode === "taglist") rerenderTaglist();
     else if (mode === "alerts") rerenderAlerts();
+    else if (mode === "settings") rerenderSettings();
     else if (mode === "groups") rerenderGroups();
     else rerenderTasks();
   },
 });
-
-
-// EID Helper for merging device and draft taglists, prioritizing draft changes
-function mergeTagsByEid(deviceRows, draftRows) {
-  const map = new Map();
-  for (const r of (deviceRows || [])) map.set(r.eid, { ...r });
-  for (const r of (draftRows || [])) map.set(r.eid, { ...r }); // draft overrides
-  return [...map.values()];
-}
 
 
 // -----------------------
@@ -204,7 +236,7 @@ function rerenderTasks() {
     selectedTask,
     taskHeaders,
     taskRows,
-    view,  // ✅ pass filtered view
+    view,
     isConnected: !!transport?.isConnected,
     onEditRow: (realIndex) => editor.openEditor("tasks", realIndex),
     onDeleteRow: (realIndex) => {
@@ -218,7 +250,6 @@ function rerenderTasks() {
     taskFilterEl.disabled = !(transport?.isConnected && taskRows.length);
   }
 }
-
 
 function rerenderGroups() {
   renderGroupsDropdown(els, groups, { isConnected: !!transport?.isConnected });
@@ -237,7 +268,7 @@ function rerenderGroups() {
     selectedGroup,
     groupHeaders,
     groupRows,
-    view,  // ✅ filtered view
+    view,
     isConnected: !!transport?.isConnected,
     onEditRow: (realIndex) => editor.openEditor("groups", realIndex),
     onDeleteRow: (realIndex) => {
@@ -254,27 +285,24 @@ function rerenderGroups() {
 
 function rerenderTaglist() {
   const isConn = !!transport?.isConnected;
+  const busy = !!sessionBusy;
 
-  const mode = (els.taglistUploadMode?.value || "merge");
+  const mode = (els.taglistUploadMode?.value || "append");
 
-  // Enable controls
-  els.syncTaglistBtn.disabled = !isConn;
-  els.eraseTaglistBtn.disabled = !isConn;
+  els.syncTaglistBtn.disabled = !isConn || busy;
+  els.eraseTaglistBtn.disabled = !isConn || busy;
+  els.useDeviceAsDraftBtn.disabled = busy || !(isConn && tagDeviceRows.length);
 
-  els.useDeviceAsDraftBtn.disabled = !(isConn && tagDeviceRows.length);
-
-  els.taglistFile.disabled = !isConn;
-  els.taglistUploadMode.disabled = !isConn;
-
-  els.addTagRowBtn.disabled = !isConn;
-
+  els.taglistFile.disabled = !isConn || busy;
+  els.taglistUploadMode.disabled = !isConn || busy;
+  els.addTagRowBtn.disabled = !isConn || busy;
 
   const hasDraft = tagDraftRows.length > 0;
-  els.downloadTaglistCsvBtn.disabled = !(isConn && hasDraft);
-  els.uploadTaglistBtn.disabled = !(isConn && hasDraft);
+  els.downloadTaglistCsvBtn.disabled = busy || !(isConn && hasDraft);
+  els.uploadTaglistBtn.disabled = busy || !(isConn && hasDraft);
 
   const q = (els.taglistFilter?.value || "").trim().toLowerCase();
-  els.taglistFilter.disabled = !(isConn && hasDraft);
+  els.taglistFilter.disabled = busy || !(isConn && hasDraft);
 
   let view = tagDraftRows.map((r, i) => ({ r, realIndex: i }));
   if (q) {
@@ -306,28 +334,26 @@ function rerenderTaglist() {
   });
 }
 
-
 function rerenderAlerts() {
   const isConn = !!transport?.isConnected;
+  const busy = !!sessionBusy;
 
   const mode = (els.alertsUploadMode?.value || "append");
 
-  els.syncAlertsBtn.disabled = !isConn;
-  els.eraseAlertsBtn.disabled = !isConn;
+  els.syncAlertsBtn.disabled = !isConn || busy;
+  els.eraseAlertsBtn.disabled = !isConn || busy;
+  els.useAlertsAsDraftBtn.disabled = busy || !(isConn && alertDeviceRows.length);
 
-  els.useAlertsAsDraftBtn.disabled = !(isConn && alertDeviceRows.length);
-
-  els.alertsFile.disabled = !isConn;
-  els.alertsUploadMode.disabled = !isConn;
-
-  els.addAlertRowBtn.disabled = !isConn;
+  els.alertsFile.disabled = !isConn || busy;
+  els.alertsUploadMode.disabled = !isConn || busy;
+  els.addAlertRowBtn.disabled = !isConn || busy;
 
   const hasDraft = alertDraftRows.length > 0;
-  els.downloadAlertsCsvBtn.disabled = !(isConn && hasDraft);
-  els.uploadAlertsBtn.disabled = !(isConn && hasDraft);
+  els.downloadAlertsCsvBtn.disabled = busy || !(isConn && hasDraft);
+  els.uploadAlertsBtn.disabled = busy || !(isConn && hasDraft);
 
   const q = (els.alertsFilter?.value || "").trim().toLowerCase();
-  els.alertsFilter.disabled = !(isConn && hasDraft);
+  els.alertsFilter.disabled = busy || !(isConn && hasDraft);
 
   let view = alertDraftRows.map((r, i) => ({ r, realIndex: i }));
   if (q) {
@@ -359,6 +385,104 @@ function rerenderAlerts() {
   });
 }
 
+function rerenderSettings() {
+  const isConn = !!transport?.isConnected;
+  const busy = !!sessionBusy;
+
+  els.syncSettingsBtn.disabled = !isConn || busy;
+  els.useSettingsAsDraftBtn.disabled = busy || !(isConn && settingsDeviceRows.length);
+
+  els.settingsFile.disabled = !isConn || busy;
+  els.addSettingRowBtn.disabled = !isConn || busy;
+
+  const hasDraft = settingsDraftRows.length > 0;
+  els.downloadSettingsBtn.disabled = busy || !(isConn && hasDraft);
+  els.uploadSettingsBtn.disabled = busy || !(isConn && hasDraft);
+
+  const q = (els.settingsFilter?.value || "").trim().toLowerCase();
+  els.settingsFilter.disabled = busy || !(isConn && hasDraft);
+
+  let view = settingsDraftRows.map((r, i) => ({ r, realIndex: i }));
+  if (q) {
+    view = view.filter(({ r }) =>
+      `${r.key} ${r.label} ${r.value}`.toLowerCase().includes(q)
+    );
+  }
+
+  const sourceLabel =
+    settingsDraftSource === "device" ? "Draft from Device" :
+    settingsDraftSource === "json" ? "Draft from JSON" :
+    "No Draft";
+
+  els.settingsMeta.textContent =
+    `${sourceLabel} — ${settingsDraftRows.length} row(s). ` +
+    `Device snapshot — ${settingsDeviceRows.length} row(s).`;
+
+  // Head
+  els.settingsHead.innerHTML = "";
+  for (const h of [...SETTINGS_HEADERS, "Actions"]) {
+    const th = document.createElement("th");
+    th.textContent = h;
+    els.settingsHead.appendChild(th);
+  }
+
+  // Body
+  els.settingsBody.innerHTML = "";
+  for (const { r, realIndex } of view) {
+    const tr = document.createElement("tr");
+
+    const tdKey = document.createElement("td");
+    tdKey.textContent = r.key ?? "";
+    tdKey.className = "mono";
+
+    const tdLabel = document.createElement("td");
+    tdLabel.textContent = r.label ?? "";
+
+    const tdValue = document.createElement("td");
+    tdValue.textContent = r.value ?? "";
+    tdValue.className = "mono";
+
+    const tdAct = document.createElement("td");
+    tdAct.style.minWidth = "140px";
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btnSmall";
+    editBtn.textContent = "Edit";
+    editBtn.disabled = !isConn || busy;
+    editBtn.addEventListener("click", () => editor.openEditor("settings", realIndex));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btnSmall btnDanger";
+    delBtn.style.marginLeft = "8px";
+    delBtn.textContent = "Delete";
+    delBtn.disabled = !isConn || busy;
+    delBtn.addEventListener("click", () => {
+      if (!confirm(`Delete draft row #${realIndex + 1}?`)) return;
+      settingsDraftRows.splice(realIndex, 1);
+      rerenderSettings();
+    });
+
+    tdAct.appendChild(editBtn);
+    tdAct.appendChild(delBtn);
+
+    tr.appendChild(tdKey);
+    tr.appendChild(tdLabel);
+    tr.appendChild(tdValue);
+    tr.appendChild(tdAct);
+    els.settingsBody.appendChild(tr);
+  }
+
+  if (els.settingsInfo) {
+    if (settingsInfo) {
+      const { btVer, btAdr, wAdr, wVer } = settingsInfo;
+      els.settingsInfo.textContent =
+        `BT Ver: ${btVer || "?"} — BT Addr: ${btAdr || "?"} — WLAN MAC: ${wAdr || "?"} — WLAN Ver: ${wVer || "?"}`;
+    } else {
+      els.settingsInfo.textContent = "";
+    }
+  }
+}
+
 
 // -----------------------
 // Connect / Disconnect
@@ -373,11 +497,13 @@ async function connect() {
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
     alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
+    settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
 
     rerenderTasks();
     rerenderGroups();
     rerenderTaglist();
     rerenderAlerts();
+    rerenderSettings();
 
     els.connectBtn.disabled = true;
     els.disconnectBtn.disabled = false;
@@ -409,6 +535,7 @@ async function connect() {
     setStatus(els, "Connected", true);
     setBusy(els, "idle");
 
+    // enable initial syncs
     els.syncTasksBtn.disabled = false;
     els.syncGroupsBtn.disabled = false;
 
@@ -417,6 +544,7 @@ async function connect() {
     rerenderGroups();
     rerenderTaglist();
     rerenderAlerts();
+    rerenderSettings();
   } catch (e) {
     alert(`Connect failed: ${e?.message || e}`);
     await cleanup();
@@ -429,6 +557,7 @@ async function cleanup() {
   try { await transport?.disconnect?.(); } catch {}
   transport = null;
   session = null;
+  sessionBusy = false;
 
   els.connectBtn.disabled = false;
   els.disconnectBtn.disabled = true;
@@ -443,15 +572,18 @@ async function cleanup() {
 
   tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
   alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
+  settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
 
   rerenderTasks();
   rerenderGroups();
   rerenderTaglist();
   rerenderAlerts();
+  rerenderSettings();
 
   setStatus(els, "Disconnected", false);
   setBusy(els, "idle");
 }
+
 
 // -----------------------
 // UI wiring
@@ -557,7 +689,10 @@ els.groupSelect.addEventListener("change", async () => {
   }
 });
 
-// --- Taglist ---
+
+// -----------------------
+// Taglist
+// -----------------------
 els.syncTaglistBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
@@ -565,7 +700,6 @@ els.syncTaglistBtn.addEventListener("click", async () => {
 
     tagDeviceRows = await fetchTaglist(session);
 
-    // Do NOT overwrite draft automatically; user decides via "Use Device as Draft"
     rerenderTaglist();
   } catch (e) {
     alert(`Failed to sync taglist: ${e?.message || e}`);
@@ -574,7 +708,6 @@ els.syncTaglistBtn.addEventListener("click", async () => {
     rerenderTaglist();
   }
 });
-
 
 els.eraseTaglistBtn.addEventListener("click", async () => {
   try {
@@ -600,13 +733,11 @@ els.useDeviceAsDraftBtn.addEventListener("click", () => {
   rerenderTaglist();
 });
 
-
 els.downloadTaglistCsvBtn.addEventListener("click", () => {
   const headers = TAGLIST_HEADERS;
   const rows = tagDraftRows.map((r) => [r.eid ?? "", r.vid ?? "", r.alertNo ?? "0"]);
   downloadText("taglist_draft.csv", toCSV(headers, rows));
 });
-
 
 els.taglistFile.addEventListener("change", async () => {
   const f = els.taglistFile.files?.[0];
@@ -615,7 +746,7 @@ els.taglistFile.addEventListener("change", async () => {
   const text = await f.text();
   const rows = parseCSV(text);
 
-  const head = (rows[0] || []).map((s) => s.toLowerCase());
+  const head = (rows[0] || []).map((s) => String(s || "").toLowerCase());
   const iE = head.indexOf("eid");
   const iV = head.indexOf("vid");
   const iA = head.indexOf("alertno");
@@ -632,7 +763,6 @@ els.taglistFile.addEventListener("change", async () => {
   rerenderTaglist();
 });
 
-
 els.uploadTaglistBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
@@ -648,7 +778,6 @@ els.uploadTaglistBtn.addEventListener("click", async () => {
       els.taglistMeta.textContent = "Erasing device taglist…";
       await eraseTaglist(session);
     } else {
-      // append
       if (!confirm(
         `APPEND will add ${tagDraftRows.length} rows to the existing wand taglist.\n` +
         `This can create duplicates if EIDs already exist.\n\nProceed?`
@@ -672,20 +801,18 @@ els.uploadTaglistBtn.addEventListener("click", async () => {
 });
 
 els.addTagRowBtn.addEventListener("click", () => {
-  // add a blank-ish draft row and open editor
   tagDraftRows.push({ eid: "", vid: "", alertNo: "0" });
-  tagDraftSource = tagDraftSource === "none" ? "device" : tagDraftSource; // whatever label you prefer
+  if (tagDraftSource === "none") tagDraftSource = "device";
   rerenderTaglist();
   editor.openEditor("taglist", tagDraftRows.length - 1);
 });
 
-
-
-// Filter typing
 els.taglistFilter?.addEventListener("input", () => rerenderTaglist());
 
 
-// --- Alerts ---
+// -----------------------
+// Alerts
+// -----------------------
 els.syncAlertsBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
@@ -726,11 +853,10 @@ els.eraseAlertsBtn.addEventListener("click", async () => {
   }
 });
 
-
 els.downloadAlertsCsvBtn.addEventListener("click", () => {
   const headers = ALERT_HEADERS;
-  const rows = alertRows.map((r) => [r.alertNo ?? "", r.alertText ?? ""]);
-  downloadText(`alerts.csv`, toCSV(headers, rows));
+  const rows = alertDraftRows.map((r) => [r.alertNo ?? "", r.alertText ?? ""]);
+  downloadText("alerts_draft.csv", toCSV(headers, rows));
 });
 
 els.alertsFile.addEventListener("change", async () => {
@@ -740,7 +866,7 @@ els.alertsFile.addEventListener("change", async () => {
   const text = await f.text();
   const rows = parseCSV(text);
 
-  const head = (rows[0] || []).map((s) => s.toLowerCase());
+  const head = (rows[0] || []).map((s) => String(s || "").toLowerCase());
   const iN = head.indexOf("alertno");
   const iT = head.indexOf("alerttext");
 
@@ -754,7 +880,6 @@ els.alertsFile.addEventListener("change", async () => {
   if (els.alertsFilter) els.alertsFilter.value = "";
   rerenderAlerts();
 });
-
 
 els.uploadAlertsBtn.addEventListener("click", async () => {
   try {
@@ -771,7 +896,6 @@ els.uploadAlertsBtn.addEventListener("click", async () => {
       els.alertsMeta.textContent = "Erasing device alerts…";
       await eraseAlerts(session);
     } else {
-      // append
       if (!confirm(
         `APPEND will add ${alertDraftRows.length} alert strings to the end of the device alerts list.\n\nProceed?`
       )) return;
@@ -793,24 +917,114 @@ els.uploadAlertsBtn.addEventListener("click", async () => {
   }
 });
 
-
-els.alertsFilter?.addEventListener("input", () => rerenderAlerts());
-
-els.downloadAlertsCsvBtn.addEventListener("click", () => {
-  const headers = ALERT_HEADERS;
-  const rows = alertDraftRows.map((r) => [r.alertNo ?? "", r.alertText ?? ""]);
-  downloadText("alerts_draft.csv", toCSV(headers, rows));
-});
-
 els.addAlertRowBtn.addEventListener("click", () => {
   alertDraftRows.push({ alertNo: "", alertText: "" });
-  alertDraftSource = alertDraftSource === "none" ? "device" : alertDraftSource;
+  if (alertDraftSource === "none") alertDraftSource = "device";
   rerenderAlerts();
   editor.openEditor("alerts", alertDraftRows.length - 1);
 });
 
+els.alertsFilter?.addEventListener("input", () => rerenderAlerts());
 
-// Download CSVs
+
+// -----------------------
+// Settings
+// -----------------------
+els.syncSettingsBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    els.syncSettingsBtn.disabled = true;
+
+    settingsDeviceRows = await fetchSettings(session, SETTINGS_DEFAULT_DEFS);
+    settingsInfo = await fetchDeviceInfo(session);
+
+    rerenderSettings();
+  } catch (e) {
+    alert(`Failed to sync settings: ${e?.message || e}`);
+  } finally {
+    els.syncSettingsBtn.disabled = !(transport?.isConnected);
+    rerenderSettings();
+  }
+});
+
+els.useSettingsAsDraftBtn.addEventListener("click", () => {
+  settingsDraftRows = settingsDeviceRows.map((r) => ({ ...r }));
+  settingsDraftSource = "device";
+  if (els.settingsFilter) els.settingsFilter.value = "";
+  rerenderSettings();
+});
+
+els.downloadSettingsBtn.addEventListener("click", () => {
+  downloadText("settings_draft.json", JSON.stringify(settingsDraftRows, null, 2));
+});
+
+els.settingsFile.addEventListener("change", async () => {
+  const f = els.settingsFile.files?.[0];
+  if (!f) return;
+  const text = await f.text();
+
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    alert("Invalid JSON file.");
+    return;
+  }
+
+  const arr = Array.isArray(obj) ? obj : (obj?.rows || []);
+  const data = (arr || []).map((r) => ({
+    key: r.key ?? "",
+    label: r.label ?? "",
+    value: r.value ?? "",
+    gId: r.gId,
+    pId: r.pId,
+  })).filter((r) => String(r.key).trim() !== "");
+
+  settingsDraftRows = data;
+  settingsDraftSource = "json";
+  if (els.settingsFilter) els.settingsFilter.value = "";
+  rerenderSettings();
+});
+
+els.uploadSettingsBtn.addEventListener("click", async () => {
+  try {
+    if (!transport?.isConnected || !session) return;
+    if (!settingsDraftRows.length) return;
+
+    if (!confirm(
+      `Upload ${settingsDraftRows.length} setting value(s) to the wand?\n\n` +
+      `This uses XSPARV for mapped rows, and XSTAGFORMAT for tag format.`
+    )) return;
+
+    els.uploadSettingsBtn.disabled = true;
+
+    await applySettings(session, settingsDraftRows, {
+      onProgress: ({ i, total, row }) => {
+        els.settingsMeta.textContent = `Uploading… ${i}/${total} (${row.key || "?"})`;
+      }
+    });
+
+    els.settingsMeta.textContent = "Upload complete. Tip: Sync Device to confirm.";
+  } catch (e) {
+    alert(`Failed to upload settings: ${e?.message || e}`);
+  } finally {
+    rerenderSettings();
+  }
+});
+
+els.addSettingRowBtn.addEventListener("click", () => {
+  settingsDraftRows.push({ key: "", label: "", value: "" });
+  if (settingsDraftSource === "none") settingsDraftSource = "device";
+  rerenderSettings();
+  editor.openEditor("settings", settingsDraftRows.length - 1);
+});
+
+els.settingsFilter?.addEventListener("input", () => rerenderSettings());
+
+
+// -----------------------
+// Downloads for Tasks/Groups
+// -----------------------
 els.downloadCsvBtn.addEventListener("click", () => {
   if (!selectedTask) return;
   const safeName = String(selectedTask.name || `task_${selectedTask.idx}`).replace(/[^\w\-]+/g, "_").slice(0, 60);
@@ -827,16 +1041,20 @@ els.downloadGroupCsvBtn.addEventListener("click", () => {
   downloadText(`${safeName}.csv`, toCSV(headers, groupRows));
 });
 
+
+// -----------------------
 // Init
+// -----------------------
 setStatus(els, "Disconnected", false);
 setBusy(els, "idle");
+
 tabs.setActiveTab("groups");
 
 rerenderTasks();
 rerenderGroups();
 rerenderTaglist();
 rerenderAlerts();
+rerenderSettings();
 
 taskFilterEl?.addEventListener("input", () => rerenderTasks());
 groupFilterEl?.addEventListener("input", () => rerenderGroups());
-

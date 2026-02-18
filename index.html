@@ -41,13 +41,13 @@
     </details>
   </div>
 
-  
-  <!-- Tabs: Tasks / Groups -->
+  <!-- Tabs -->
   <div class="card">
    <div class="row gap10 mb10">
       <button class="btn btnSmall btnPrimary" id="tabGroupsBtn" type="button">Groups</button>
       <button class="btn btnSmall" id="tabTasksBtn" type="button">Tasks</button>
       <button class="btn btnSmall" id="tabTaglistBtn" type="button">Taglist</button>
+      <button class="btn btnSmall" id="tabSettingsBtn" type="button">Settings</button>
       <span class="muted" style="margin-left:auto;" id="activeTabHint">Groups</span>
     </div>
 
@@ -55,7 +55,7 @@
     <div id="panelTasks" style="display:none;">
       <div class="row gap10 mb10">
         <button class="btn btnSmall" id="syncTasksBtn" disabled>Sync Tasks</button>
-        
+
         <label class="muted" for="taskSelect">Task:</label>
         <select id="taskSelect" disabled>
           <option value="">(connect to load tasks)</option>
@@ -65,8 +65,6 @@
         <input id="taskFilter" type="text" placeholder="Search…" disabled>
 
         <button id="downloadCsvBtn" disabled>Download CSV</button>
-
-        
       </div>
 
       <h3 class="mb6">Preview</h3>
@@ -85,14 +83,13 @@
       <div class="row gap10 mb10">
         <button class="btn btnSmall" id="syncGroupsBtn" disabled>Sync Groups</button>
 
-      <label class="muted" for="groupSelect">Group:</label>
-      <select id="groupSelect" disabled>
-        <option value="">(sync groups)</option>
-      </select>
+        <label class="muted" for="groupSelect">Group:</label>
+        <select id="groupSelect" disabled>
+          <option value="">(sync groups)</option>
+        </select>
 
-      <label class="muted" for="groupFilter">Search:</label>
-      <input id="groupFilter" type="text" placeholder="Search…" disabled>
-
+        <label class="muted" for="groupFilter">Search:</label>
+        <input id="groupFilter" type="text" placeholder="Search…" disabled>
 
         <label class="muted inlineCheck">
           <input type="checkbox" id="preferGroupX" checked />
@@ -116,6 +113,7 @@
     </div>
   </div>
 
+
   <!-- Taglist & Alerts panel -->
   <div id="panelTaglist" style="display:none;">
     <div class="card">
@@ -127,7 +125,7 @@
 
         <label class="muted" for="taglistUploadMode">Upload mode:</label>
         <select id="taglistUploadMode" disabled>
-                    <option value="append">Append</option>
+          <option value="append" selected>Append</option>
           <option value="replace">Replace (erase then upload)</option>
         </select>
       </div>
@@ -164,7 +162,7 @@
 
         <label class="muted" for="alertsUploadMode">Upload mode:</label>
         <select id="alertsUploadMode" disabled>
-          <option value="append" selected>Append (recommended)</option>
+          <option value="append" selected>Append</option>
           <option value="replace">Replace (erase then upload)</option>
         </select>
 
@@ -181,7 +179,6 @@
         <button class="btn btnPrimary" id="uploadAlertsBtn" disabled>Upload Draft → Wand</button>
       </div>
 
-
       <div class="muted" id="alertsMeta">Alerts — not loaded.</div>
 
       <div class="scroll scrollTall">
@@ -191,7 +188,38 @@
         </table>
       </div>
     </div>
+  </div>
 
+
+  <!-- Settings panel -->
+  <div id="panelSettings" style="display:none;">
+    <div class="card">
+      <div class="row gap10 mb10">
+        <button class="btn" id="syncSettingsBtn" disabled>Sync Device</button>
+        <button class="btn" id="useSettingsAsDraftBtn" disabled>Use Device as Draft</button>
+
+        <label class="muted" for="settingsFile">Load JSON as Draft:</label>
+        <input id="settingsFile" type="file" accept=".json,application/json" disabled>
+
+        <button class="btn" id="downloadSettingsBtn" disabled>Export Draft JSON</button>
+        <button class="btn" id="addSettingRowBtn" disabled>Add Row</button>
+        <button class="btn btnPrimary" id="uploadSettingsBtn" disabled>Upload Draft → Wand</button>
+
+        <label class="muted" for="settingsFilter">Filter:</label>
+        <input id="settingsFilter" type="text" placeholder="Filter draft…" disabled>
+      </div>
+
+      <div class="muted" id="settingsMeta">Settings — not loaded.</div>
+
+      <div class="scroll scrollTall">
+        <table>
+          <thead><tr id="settingsHead"></tr></thead>
+          <tbody id="settingsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="muted mt8" id="settingsInfo"></div>
+    </div>
   </div>
 
 
@@ -220,6 +248,6 @@
     </div>
   </div>
 
-<script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
