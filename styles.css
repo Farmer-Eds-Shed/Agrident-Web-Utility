@@ -271,7 +271,28 @@ th{
   margin-top:8px;
   -webkit-overflow-scrolling: touch;
 }
+
+.scroll table thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.scroll table thead th {
+  background: #fff;            /* or your header tint */
+  z-index: 6;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.08);  /* subtle divider */
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
 .scrollTall{ max-height:320px; }
+
+.scroll table thead th:first-child { border-top-left-radius: 12px; }
+.scroll table thead th:last-child  { border-top-right-radius: 12px; }
 
 /* Modal */
 .overlay{
