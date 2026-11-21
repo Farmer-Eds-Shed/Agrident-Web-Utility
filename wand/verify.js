@@ -122,3 +122,19 @@ export async function verifiedDownload(fetchOnce, { expectedCount = null, maxAtt
     : (lastErr ? ` Last error: ${lastErr.message || lastErr}` : "");
   throw new Error(`Download could not be verified after ${maxAttempts} attempts (lossy link?).${detail}`);
 }
+
+/**
+ * Timeouts for bulk downloads (hundreds to thousands of records).
+ *  - timeoutMsOverride: INACTIVITY limit (resets whenever data arrives)
+ *  - absoluteTimeoutMs: hard cap on total time per download attempt
+ * The cap scales with the expected row count when known (generous: ~150 ms/row, i.e. a slow
+ * 9600 baud link), otherwise a fixed 10 minutes. Clamped to 1..30 minutes.
+ */
+export function bulkTimeouts(expectedRows = null) {
+  const n = Number(expectedRows);
+  const abs = Number.isFinite(n) && n > 0 ? 60000 + n * 150 : 10 * 60000;
+  return {
+    timeoutMsOverride: 20000,
+    absoluteTimeoutMs: Math.min(30 * 60000, Math.max(60000, abs)),
+  };
+}

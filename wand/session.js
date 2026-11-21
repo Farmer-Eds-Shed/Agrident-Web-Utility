@@ -4,7 +4,8 @@ export function createWandSession({
   setBusy,
   onCommandUIStateChange,
   maxText = 60000,
-  timeoutMs = 12000,
+  timeoutMs = 12000,          // inactivity: max silence before a command fails
+  absoluteTimeoutMs = 60000,  // hard cap on total time per command, regardless of activity
   appendCR = false,
   appendLF = false,
   enc = new TextEncoder(),
@@ -15,6 +16,8 @@ export function createWandSession({
   let currentCommand = null;
   let cmdTimer = null;
   let cmdTimeoutMs = timeoutMs;
+  let cmdAbsoluteMs = absoluteTimeoutMs;
+  let absTimer = null;
 
   // Diagnostics: if droppedFragments > 0 the link lost bytes (reader/BLE side).
   const stats = { chunks: 0, frames: 0, droppedFragments: 0 };
@@ -38,18 +41,25 @@ export function createWandSession({
 
   // timeoutMs is an INACTIVITY timeout: every received chunk re-arms it, so a long
   // but healthy download (slow over BLE) is not cut off mid-transfer.
+  function failCommand(reason) {
+    if (cmdTimer) clearTimeout(cmdTimer);
+    if (absTimer) clearTimeout(absTimer);
+    cmdTimer = null;
+    absTimer = null;
+
+    const done = currentCommand;
+    currentCommand = null;
+
+    setBusy?.("idle");
+    onCommandUIStateChange?.(false);
+
+    if (done) done.reject(new Error(`Timeout (${reason}, ${done.frames.length} frames received)`));
+  }
+
   function armCmdTimer() {
     if (!currentCommand) return;
     if (cmdTimer) clearTimeout(cmdTimer);
-    cmdTimer = setTimeout(() => {
-      const done = currentCommand;
-      currentCommand = null;
-
-      setBusy?.("idle");
-      onCommandUIStateChange?.(false);
-
-      if (done) done.reject(new Error(`Timeout (no data for ${cmdTimeoutMs} ms, ${done.frames.length} frames received)`));
-    }, cmdTimeoutMs);
+    cmdTimer = setTimeout(() => failCommand(`no data for ${cmdTimeoutMs} ms`), cmdTimeoutMs);
   }
 
   function armWatcherTimer() {
@@ -112,7 +122,7 @@ export function createWandSession({
     }
   }
 
-  function beginCommand(name, okToken, timeoutOverrideMs) {
+  function beginCommand(name, okToken, timeoutOverrideMs, absoluteOverrideMs) {
     if (currentCommand) throw new Error(`Busy running ${currentCommand.name}`);
     if (watcher) throw new Error(`Busy waiting for ${watcher.name}`);
 
@@ -128,7 +138,10 @@ export function createWandSession({
     onCommandUIStateChange?.(true);
 
     cmdTimeoutMs = timeoutOverrideMs ?? timeoutMs;
+    cmdAbsoluteMs = absoluteOverrideMs ?? absoluteTimeoutMs;
     armCmdTimer();
+    if (absTimer) clearTimeout(absTimer);
+    absTimer = setTimeout(() => failCommand(`exceeded ${cmdAbsoluteMs} ms total`), cmdAbsoluteMs);
 
     return p;
   }
@@ -137,7 +150,9 @@ export function createWandSession({
     if (!currentCommand) return;
 
     if (cmdTimer) clearTimeout(cmdTimer);
+    if (absTimer) clearTimeout(absTimer);
     cmdTimer = null;
+    absTimer = null;
 
     const done = currentCommand;
     currentCommand = null;
@@ -245,7 +260,7 @@ export function createWandSession({
 
     let p = null;
     if (structured) {
-      p = beginCommand(structured.name, structured.okToken, structured.timeoutMsOverride);
+      p = beginCommand(structured.name, structured.okToken, structured.timeoutMsOverride, structured.absoluteTimeoutMs);
     }
 
     await enqueueWrite(out);

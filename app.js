@@ -641,7 +641,7 @@ els.taskSelect.addEventListener("change", async () => {
     // Over BLE, verify and auto-retry (notifications can be dropped); serial is reliable as-is.
     const rawRows = (transport instanceof BleTransport)
       ? await fetchTaskRowsVerified(session, idx, { expectedCount: selectedTask?.count })
-      : await fetchTaskRows(session, idx);
+      : await fetchTaskRows(session, idx, { expectedCount: selectedTask?.count });
 
     const headers = getTaskHeaders(taskHeaders, rawRows);
     taskRows = rawRows.map((r) => formatRow(r, headers));

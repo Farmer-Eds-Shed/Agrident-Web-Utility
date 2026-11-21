@@ -1,6 +1,6 @@
 // wand/commands/tasks.js
 // Agrident task catalogue + dataset reads.
-import { verifiedDownload } from "../verify.js";
+import { verifiedDownload, bulkTimeouts } from "../verify.js";
 
 function parseTaskRow(parts) {
   return {
@@ -48,8 +48,8 @@ export async function fetchTaskHeaders(session, idx) {
  * Returns raw dataset rows from CSW.
  * Each row is an array of strings split by '|'.
  */
-export async function fetchTaskRows(session, idx) {
-  const done = await session.send(`CSW|${idx}`, { name: "Get data", okToken: "CSWOK" });
+export async function fetchTaskRows(session, idx, { expectedCount = null } = {}) {
+  const done = await session.send(`CSW|${idx}`, { name: "Get data", okToken: "CSWOK", ...bulkTimeouts(expectedCount) });
 
   const dataFrames = done.frames
     .filter(session.helpers.isBracketFrame)
@@ -68,7 +68,7 @@ export async function fetchTaskRows(session, idx) {
 export async function fetchTaskRowsVerified(session, idx, { expectedCount = null, maxAttempts = 5 } = {}) {
   return verifiedDownload(async (attempt, max) => {
     const label = attempt > 1 ? `Get data (attempt ${attempt}/${max})` : "Get data";
-    const done = await session.send(`CSW|${idx}`, { name: label, okToken: "CSWOK" });
+    const done = await session.send(`CSW|${idx}`, { name: label, okToken: "CSWOK", ...bulkTimeouts(expectedCount) });
     return done.frames
       .filter(session.helpers.isBracketFrame)
       .filter((fr) => !session.helpers.isCmdFrame(fr, "CSW"))

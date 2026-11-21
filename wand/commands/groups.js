@@ -1,6 +1,6 @@
 // wand/commands/groups.js
 import { formatRow } from "../../parsers/format.js";
-import { verifiedDownload } from "../verify.js";
+import { verifiedDownload, bulkTimeouts } from "../verify.js";
 
 const GROUP_HEADERS_BASE = ["Date", "Time", "Type", "EID", "VID", "Alert"];
 const GROUP_HEADERS_X = [...GROUP_HEADERS_BASE, "Weight"];
@@ -49,7 +49,7 @@ export async function fetchGroups(session) {
 function downloadRawGroup(session, cmd, okToken, baseName, { verify, maxAttempts }) {
   const once = async (attempt = 1, max = 1) => {
     const name = attempt > 1 ? `${baseName} (attempt ${attempt}/${max})` : baseName;
-    const done = await session.send(cmd, { name, okToken });
+    const done = await session.send(cmd, { name, okToken, ...bulkTimeouts() });
     return done.frames
       .filter(session.helpers.isBracketFrame)
       .filter((fr) => !session.helpers.isCmdFrame(fr, cmd.split("|")[0]))
