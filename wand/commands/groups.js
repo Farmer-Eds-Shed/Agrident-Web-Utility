@@ -1,5 +1,6 @@
 // wand/commands/groups.js
 import { formatRow } from "../../parsers/format.js";
+import { verifiedDownload } from "../verify.js";
 
 const GROUP_HEADERS_BASE = ["Date", "Time", "Type", "EID", "VID", "Alert"];
 const GROUP_HEADERS_X = [...GROUP_HEADERS_BASE, "Weight"];
@@ -44,21 +45,27 @@ export async function fetchGroups(session) {
   }));
 }
 
-export async function fetchGroupRows(session, groupId, { preferX = true } = {}) {
+// Download raw group rows, re-fetching until the result is trustworthy (see verify.js).
+function downloadRawGroup(session, cmd, okToken, baseName, { verify, maxAttempts }) {
+  const once = async (attempt = 1, max = 1) => {
+    const name = attempt > 1 ? `${baseName} (attempt ${attempt}/${max})` : baseName;
+    const done = await session.send(cmd, { name, okToken });
+    return done.frames
+      .filter(session.helpers.isBracketFrame)
+      .filter((fr) => !session.helpers.isCmdFrame(fr, cmd.split("|")[0]))
+      .filter((fr) => fr !== `[${okToken}]`)
+      .filter((fr) => fr.includes("|"))
+      .map(session.helpers.parsePipeFrame);
+  };
+  return verify ? verifiedDownload(once, { maxAttempts, session }) : once();
+}
+
+export async function fetchGroupRows(session, groupId, { preferX = true, verify = false, maxAttempts = 5 } = {}) {
   if (preferX) {
     try {
-      const doneX = await session.send(`XGGROUPX|${groupId}`, {
-        name: "Get group data (with weight)",
-        okToken: "XGGROUPXOK",
-      });
-
-      const frames = doneX.frames
-        .filter(session.helpers.isBracketFrame)
-        .filter((fr) => !session.helpers.isCmdFrame(fr, "XGGROUPX"))
-        .filter((fr) => fr !== "[XGGROUPXOK]")
-        .filter((fr) => fr.includes("|"));
-
-      const rawRows = frames.map(session.helpers.parsePipeFrame);
+      const rawRows = await downloadRawGroup(
+        session, `XGGROUPX|${groupId}`, "XGGROUPXOK", "Get group data (with weight)", { verify, maxAttempts }
+      );
 
       const rows = rawRows
         .map(mapGroupRowX)
@@ -70,15 +77,9 @@ export async function fetchGroupRows(session, groupId, { preferX = true } = {}) 
     }
   }
 
-  const done = await session.send(`XGGROUP|${groupId}`, { name: "Get group data", okToken: "XGGROUPOK" });
-
-  const frames = done.frames
-    .filter(session.helpers.isBracketFrame)
-    .filter((fr) => !session.helpers.isCmdFrame(fr, "XGGROUP"))
-    .filter((fr) => fr !== "[XGGROUPOK]")
-    .filter((fr) => fr.includes("|"));
-
-  const rawRows = frames.map(session.helpers.parsePipeFrame);
+  const rawRows = await downloadRawGroup(
+    session, `XGGROUP|${groupId}`, "XGGROUPOK", "Get group data", { verify, maxAttempts }
+  );
 
   const rows = rawRows
     .map(mapGroupRowBase)

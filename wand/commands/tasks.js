@@ -1,5 +1,6 @@
 // wand/commands/tasks.js
 // Agrident task catalogue + dataset reads.
+import { verifiedDownload } from "../verify.js";
 
 function parseTaskRow(parts) {
   return {
@@ -57,4 +58,22 @@ export async function fetchTaskRows(session, idx) {
     .filter((fr) => fr.includes("|"));
 
   return dataFrames.map(session.helpers.parsePipeFrame);
+}
+
+/**
+ * Like fetchTaskRows, but re-downloads until the data checks out (row count matches the
+ * task list's count, or two consecutive downloads are identical, and no merged rows).
+ * Use this over BLE, where notifications can be dropped.
+ */
+export async function fetchTaskRowsVerified(session, idx, { expectedCount = null, maxAttempts = 5 } = {}) {
+  return verifiedDownload(async (attempt, max) => {
+    const label = attempt > 1 ? `Get data (attempt ${attempt}/${max})` : "Get data";
+    const done = await session.send(`CSW|${idx}`, { name: label, okToken: "CSWOK" });
+    return done.frames
+      .filter(session.helpers.isBracketFrame)
+      .filter((fr) => !session.helpers.isCmdFrame(fr, "CSW"))
+      .filter((fr) => fr !== "[CSWOK]")
+      .filter((fr) => fr.includes("|"))
+      .map(session.helpers.parsePipeFrame);
+  }, { expectedCount, maxAttempts, session });
 }

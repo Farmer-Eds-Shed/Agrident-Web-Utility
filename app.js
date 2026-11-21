@@ -22,7 +22,7 @@ import { renderGroupsDropdown, renderGroupPreview, getGroupHeaders } from "./ui/
 import { SerialTransport, BleTransport } from "./wand/transport.js";
 import { createWandSession } from "./wand/session.js";
 
-import { fetchTasks, fetchTaskHeaders, fetchTaskRows } from "./wand/commands/tasks.js";
+import { fetchTasks, fetchTaskHeaders, fetchTaskRows, fetchTaskRowsVerified } from "./wand/commands/tasks.js";
 import { fetchGroups, fetchGroupRows } from "./wand/commands/groups.js";
 
 import { parseCSV } from "./parsers/csv_import.js";
@@ -638,7 +638,10 @@ els.taskSelect.addEventListener("change", async () => {
     rerenderTasks();
 
     taskHeaders = await fetchTaskHeaders(session, idx);
-    const rawRows = await fetchTaskRows(session, idx);
+    // Over BLE, verify and auto-retry (notifications can be dropped); serial is reliable as-is.
+    const rawRows = (transport instanceof BleTransport)
+      ? await fetchTaskRowsVerified(session, idx, { expectedCount: selectedTask?.count })
+      : await fetchTaskRows(session, idx);
 
     const headers = getTaskHeaders(taskHeaders, rawRows);
     taskRows = rawRows.map((r) => formatRow(r, headers));
@@ -679,7 +682,10 @@ els.groupSelect.addEventListener("change", async () => {
     groupRows = [];
     rerenderGroups();
 
-    const out = await fetchGroupRows(session, id, { preferX: preferGroupX });
+    const out = await fetchGroupRows(session, id, {
+      preferX: preferGroupX,
+      verify: transport instanceof BleTransport,
+    });
     groupHeaders = out.headers;
     groupRows = out.rows;
 
