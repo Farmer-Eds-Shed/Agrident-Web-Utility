@@ -14,6 +14,10 @@ export function createWandSession({
   let rxText = "";
   let currentCommand = null;
   let cmdTimer = null;
+  let cmdTimeoutMs = timeoutMs;
+
+  // Diagnostics: if droppedFragments > 0 the link lost bytes (reader/BLE side).
+  const stats = { chunks: 0, frames: 0, droppedFragments: 0 };
 
   // A lightweight “frame watcher” used by taglist/alerts uploads where
   // there is no OK token, only an echoed frame.
@@ -32,7 +36,36 @@ export function createWandSession({
     rxText = "";
   }
 
+  // timeoutMs is an INACTIVITY timeout: every received chunk re-arms it, so a long
+  // but healthy download (slow over BLE) is not cut off mid-transfer.
+  function armCmdTimer() {
+    if (!currentCommand) return;
+    if (cmdTimer) clearTimeout(cmdTimer);
+    cmdTimer = setTimeout(() => {
+      const done = currentCommand;
+      currentCommand = null;
+
+      setBusy?.("idle");
+      onCommandUIStateChange?.(false);
+
+      if (done) done.reject(new Error(`Timeout (no data for ${cmdTimeoutMs} ms, ${done.frames.length} frames received)`));
+    }, cmdTimeoutMs);
+  }
+
+  function armWatcherTimer() {
+    if (!watcher) return;
+    clearTimeout(watcher.timer);
+    watcher.timer = setTimeout(() => {
+      const w = watcher;
+      watcher = null;
+      if (w) w.reject(new Error("Timeout"));
+    }, watcher.timeoutMs);
+  }
+
   function onTextChunk(chunk) {
+    stats.chunks += 1;
+    if (currentCommand) armCmdTimer();
+    if (watcher) armWatcherTimer();
     rxText += chunk;
     if (rxText.length > maxText) rxText = rxText.slice(-maxText);
     consumeFrames();
@@ -61,6 +94,16 @@ export function createWandSession({
       const close = rxText.indexOf("]", open);
       if (close === -1) return;
 
+      // A second "[" before the "]" means the tail of the first frame never arrived.
+      // Drop the fragment and resync on the newer frame instead of merging two rows.
+      const innerOpen = rxText.indexOf("[", open + 1);
+      if (innerOpen !== -1 && innerOpen < close) {
+        stats.droppedFragments += 1;
+        console.warn("[wand] dropped truncated frame:", rxText.slice(open, innerOpen));
+        rxText = rxText.slice(innerOpen);
+        continue;
+      }
+
       const raw = rxText.slice(open, close + 1);
       rxText = rxText.slice(close + 1);
 
@@ -84,18 +127,8 @@ export function createWandSession({
     setBusy?.(name);
     onCommandUIStateChange?.(true);
 
-    if (cmdTimer) clearTimeout(cmdTimer);
-    const t = timeoutOverrideMs ?? timeoutMs;
-
-    cmdTimer = setTimeout(() => {
-      const done = currentCommand;
-      currentCommand = null;
-
-      setBusy?.("idle");
-      onCommandUIStateChange?.(false);
-
-      if (done) done.reject(new Error("Timeout"));
-    }, t);
+    cmdTimeoutMs = timeoutOverrideMs ?? timeoutMs;
+    armCmdTimer();
 
     return p;
   }
@@ -134,7 +167,7 @@ export function createWandSession({
       if (w) w.reject(new Error("Timeout"));
     }, t);
 
-    watcher = { name, predicate, resolve, reject, timer };
+    watcher = { name, predicate, resolve, reject, timer, timeoutMs: t };
     return p;
   }
 
@@ -149,6 +182,7 @@ export function createWandSession({
   }
 
   function onFrame(f) {
+    stats.frames += 1;
     // First: watcher (used by sendFrameAndWait) – it can match ANY frame.
     if (watcher) {
       try {
@@ -253,6 +287,7 @@ export function createWandSession({
     waitForFrame,
     sendFrameAndWait,
     resetRx,
+    stats,
     helpers: { isBracketFrame, isCmdFrame, parsePipeFrame },
   };
 }

@@ -1,0 +1,448 @@
+diff -ruN orig/app.js Agrident-Web-Utility-main/app.js
+--- orig/app.js	2026-11-14 09:33:48.510695595 +0000
++++ Agrident-Web-Utility-main/app.js	2026-11-21 09:35:03.354951176 +0000
+@@ -22,7 +22,7 @@
+ import { SerialTransport, BleTransport } from "./wand/transport.js";
+ import { createWandSession } from "./wand/session.js";
+ 
+-import { fetchTasks, fetchTaskHeaders, fetchTaskRows } from "./wand/commands/tasks.js";
++import { fetchTasks, fetchTaskHeaders, fetchTaskRows, fetchTaskRowsVerified } from "./wand/commands/tasks.js";
+ import { fetchGroups, fetchGroupRows } from "./wand/commands/groups.js";
+ 
+ import { parseCSV } from "./parsers/csv_import.js";
+@@ -638,7 +638,10 @@
+     rerenderTasks();
+ 
+     taskHeaders = await fetchTaskHeaders(session, idx);
+-    const rawRows = await fetchTaskRows(session, idx);
++    // Over BLE, verify and auto-retry (notifications can be dropped); serial is reliable as-is.
++    const rawRows = (transport instanceof BleTransport)
++      ? await fetchTaskRowsVerified(session, idx, { expectedCount: selectedTask?.count })
++      : await fetchTaskRows(session, idx);
+ 
+     const headers = getTaskHeaders(taskHeaders, rawRows);
+     taskRows = rawRows.map((r) => formatRow(r, headers));
+@@ -679,7 +682,10 @@
+     groupRows = [];
+     rerenderGroups();
+ 
+-    const out = await fetchGroupRows(session, id, { preferX: preferGroupX });
++    const out = await fetchGroupRows(session, id, {
++      preferX: preferGroupX,
++      verify: transport instanceof BleTransport,
++    });
+     groupHeaders = out.headers;
+     groupRows = out.rows;
+ 
+diff -ruN orig/wand/commands/groups.js Agrident-Web-Utility-main/wand/commands/groups.js
+--- orig/wand/commands/groups.js	2026-11-14 09:33:48.510935119 +0000
++++ Agrident-Web-Utility-main/wand/commands/groups.js	2026-11-21 09:35:03.354219649 +0000
+@@ -1,5 +1,6 @@
+ // wand/commands/groups.js
+ import { formatRow } from "../../parsers/format.js";
++import { verifiedDownload } from "../verify.js";
+ 
+ const GROUP_HEADERS_BASE = ["Date", "Time", "Type", "EID", "VID", "Alert"];
+ const GROUP_HEADERS_X = [...GROUP_HEADERS_BASE, "Weight"];
+@@ -44,21 +45,27 @@
+   }));
+ }
+ 
+-export async function fetchGroupRows(session, groupId, { preferX = true } = {}) {
++// Download raw group rows, re-fetching until the result is trustworthy (see verify.js).
++function downloadRawGroup(session, cmd, okToken, baseName, { verify, maxAttempts }) {
++  const once = async (attempt = 1, max = 1) => {
++    const name = attempt > 1 ? `${baseName} (attempt ${attempt}/${max})` : baseName;
++    const done = await session.send(cmd, { name, okToken });
++    return done.frames
++      .filter(session.helpers.isBracketFrame)
++      .filter((fr) => !session.helpers.isCmdFrame(fr, cmd.split("|")[0]))
++      .filter((fr) => fr !== `[${okToken}]`)
++      .filter((fr) => fr.includes("|"))
++      .map(session.helpers.parsePipeFrame);
++  };
++  return verify ? verifiedDownload(once, { maxAttempts, session }) : once();
++}
++
++export async function fetchGroupRows(session, groupId, { preferX = true, verify = false, maxAttempts = 5 } = {}) {
+   if (preferX) {
+     try {
+-      const doneX = await session.send(`XGGROUPX|${groupId}`, {
+-        name: "Get group data (with weight)",
+-        okToken: "XGGROUPXOK",
+-      });
+-
+-      const frames = doneX.frames
+-        .filter(session.helpers.isBracketFrame)
+-        .filter((fr) => !session.helpers.isCmdFrame(fr, "XGGROUPX"))
+-        .filter((fr) => fr !== "[XGGROUPXOK]")
+-        .filter((fr) => fr.includes("|"));
+-
+-      const rawRows = frames.map(session.helpers.parsePipeFrame);
++      const rawRows = await downloadRawGroup(
++        session, `XGGROUPX|${groupId}`, "XGGROUPXOK", "Get group data (with weight)", { verify, maxAttempts }
++      );
+ 
+       const rows = rawRows
+         .map(mapGroupRowX)
+@@ -70,15 +77,9 @@
+     }
+   }
+ 
+-  const done = await session.send(`XGGROUP|${groupId}`, { name: "Get group data", okToken: "XGGROUPOK" });
+-
+-  const frames = done.frames
+-    .filter(session.helpers.isBracketFrame)
+-    .filter((fr) => !session.helpers.isCmdFrame(fr, "XGGROUP"))
+-    .filter((fr) => fr !== "[XGGROUPOK]")
+-    .filter((fr) => fr.includes("|"));
+-
+-  const rawRows = frames.map(session.helpers.parsePipeFrame);
++  const rawRows = await downloadRawGroup(
++    session, `XGGROUP|${groupId}`, "XGGROUPOK", "Get group data", { verify, maxAttempts }
++  );
+ 
+   const rows = rawRows
+     .map(mapGroupRowBase)
+diff -ruN orig/wand/commands/tasks.js Agrident-Web-Utility-main/wand/commands/tasks.js
+--- orig/wand/commands/tasks.js	2026-11-14 09:33:48.510958502 +0000
++++ Agrident-Web-Utility-main/wand/commands/tasks.js	2026-11-21 09:35:03.353594344 +0000
+@@ -1,5 +1,6 @@
+ // wand/commands/tasks.js
+ // Agrident task catalogue + dataset reads.
++import { verifiedDownload } from "../verify.js";
+ 
+ function parseTaskRow(parts) {
+   return {
+@@ -58,3 +59,21 @@
+ 
+   return dataFrames.map(session.helpers.parsePipeFrame);
+ }
++
++/**
++ * Like fetchTaskRows, but re-downloads until the data checks out (row count matches the
++ * task list's count, or two consecutive downloads are identical, and no merged rows).
++ * Use this over BLE, where notifications can be dropped.
++ */
++export async function fetchTaskRowsVerified(session, idx, { expectedCount = null, maxAttempts = 5 } = {}) {
++  return verifiedDownload(async (attempt, max) => {
++    const label = attempt > 1 ? `Get data (attempt ${attempt}/${max})` : "Get data";
++    const done = await session.send(`CSW|${idx}`, { name: label, okToken: "CSWOK" });
++    return done.frames
++      .filter(session.helpers.isBracketFrame)
++      .filter((fr) => !session.helpers.isCmdFrame(fr, "CSW"))
++      .filter((fr) => fr !== "[CSWOK]")
++      .filter((fr) => fr.includes("|"))
++      .map(session.helpers.parsePipeFrame);
++  }, { expectedCount, maxAttempts, session });
++}
+diff -ruN orig/wand/session.js Agrident-Web-Utility-main/wand/session.js
+--- orig/wand/session.js	2026-11-14 09:33:48.510977755 +0000
++++ Agrident-Web-Utility-main/wand/session.js	2026-11-14 09:33:48.554853187 +0000
+@@ -14,6 +14,10 @@
+   let rxText = "";
+   let currentCommand = null;
+   let cmdTimer = null;
++  let cmdTimeoutMs = timeoutMs;
++
++  // Diagnostics: if droppedFragments > 0 the link lost bytes (reader/BLE side).
++  const stats = { chunks: 0, frames: 0, droppedFragments: 0 };
+ 
+   // A lightweight “frame watcher” used by taglist/alerts uploads where
+   // there is no OK token, only an echoed frame.
+@@ -32,7 +36,36 @@
+     rxText = "";
+   }
+ 
++  // timeoutMs is an INACTIVITY timeout: every received chunk re-arms it, so a long
++  // but healthy download (slow over BLE) is not cut off mid-transfer.
++  function armCmdTimer() {
++    if (!currentCommand) return;
++    if (cmdTimer) clearTimeout(cmdTimer);
++    cmdTimer = setTimeout(() => {
++      const done = currentCommand;
++      currentCommand = null;
++
++      setBusy?.("idle");
++      onCommandUIStateChange?.(false);
++
++      if (done) done.reject(new Error(`Timeout (no data for ${cmdTimeoutMs} ms, ${done.frames.length} frames received)`));
++    }, cmdTimeoutMs);
++  }
++
++  function armWatcherTimer() {
++    if (!watcher) return;
++    clearTimeout(watcher.timer);
++    watcher.timer = setTimeout(() => {
++      const w = watcher;
++      watcher = null;
++      if (w) w.reject(new Error("Timeout"));
++    }, watcher.timeoutMs);
++  }
++
+   function onTextChunk(chunk) {
++    stats.chunks += 1;
++    if (currentCommand) armCmdTimer();
++    if (watcher) armWatcherTimer();
+     rxText += chunk;
+     if (rxText.length > maxText) rxText = rxText.slice(-maxText);
+     consumeFrames();
+@@ -61,6 +94,16 @@
+       const close = rxText.indexOf("]", open);
+       if (close === -1) return;
+ 
++      // A second "[" before the "]" means the tail of the first frame never arrived.
++      // Drop the fragment and resync on the newer frame instead of merging two rows.
++      const innerOpen = rxText.indexOf("[", open + 1);
++      if (innerOpen !== -1 && innerOpen < close) {
++        stats.droppedFragments += 1;
++        console.warn("[wand] dropped truncated frame:", rxText.slice(open, innerOpen));
++        rxText = rxText.slice(innerOpen);
++        continue;
++      }
++
+       const raw = rxText.slice(open, close + 1);
+       rxText = rxText.slice(close + 1);
+ 
+@@ -84,18 +127,8 @@
+     setBusy?.(name);
+     onCommandUIStateChange?.(true);
+ 
+-    if (cmdTimer) clearTimeout(cmdTimer);
+-    const t = timeoutOverrideMs ?? timeoutMs;
+-
+-    cmdTimer = setTimeout(() => {
+-      const done = currentCommand;
+-      currentCommand = null;
+-
+-      setBusy?.("idle");
+-      onCommandUIStateChange?.(false);
+-
+-      if (done) done.reject(new Error("Timeout"));
+-    }, t);
++    cmdTimeoutMs = timeoutOverrideMs ?? timeoutMs;
++    armCmdTimer();
+ 
+     return p;
+   }
+@@ -134,7 +167,7 @@
+       if (w) w.reject(new Error("Timeout"));
+     }, t);
+ 
+-    watcher = { name, predicate, resolve, reject, timer };
++    watcher = { name, predicate, resolve, reject, timer, timeoutMs: t };
+     return p;
+   }
+ 
+@@ -149,6 +182,7 @@
+   }
+ 
+   function onFrame(f) {
++    stats.frames += 1;
+     // First: watcher (used by sendFrameAndWait) – it can match ANY frame.
+     if (watcher) {
+       try {
+@@ -253,6 +287,7 @@
+     waitForFrame,
+     sendFrameAndWait,
+     resetRx,
++    stats,
+     helpers: { isBracketFrame, isCmdFrame, parsePipeFrame },
+   };
+ }
+diff -ruN orig/wand/transport.js Agrident-Web-Utility-main/wand/transport.js
+--- orig/wand/transport.js	2026-11-14 09:33:48.510986312 +0000
++++ Agrident-Web-Utility-main/wand/transport.js	2026-11-14 09:33:48.554595175 +0000
+@@ -13,6 +13,8 @@
+     this.reader = null;
+     this.writer = null;
+     this._reading = false;
++    // Streaming decoder: a multi-byte char split across two reads must not become U+FFFD.
++    this._dec = new TextDecoder();
+   }
+ 
+   get isConnected() { return !!this.port; }
+@@ -47,7 +49,7 @@
+     while (this._reading) {
+       const { value, done } = await this.reader.read();
+       if (done) break;
+-      if (value) this.onTextChunk(dec.decode(value));
++      if (value) this.onTextChunk(this._dec.decode(value, { stream: true }));
+     }
+   }
+ }
+@@ -58,6 +60,9 @@
+     this.device = null;
+     this.char = null;
+     this._onNotify = null;
++    this._dec = new TextDecoder();
++    this.rxBytes = 0; // diagnostics: total bytes received via notifications
++    this.rxNotifications = 0;
+   }
+ 
+   get isConnected() { return !!this.char; }
+@@ -76,13 +81,16 @@
+     const chr = await svc.getCharacteristic(UUID_BATT_CHR);
+     this.char = chr;
+ 
+-    await chr.startNotifications();
++    this._dec = new TextDecoder();
+     this._onNotify = (ev) => {
+       const u8 = u8FromDV(ev.target.value);
+-      const chunk = dec.decode(u8);
+-      this.onTextChunk(chunk);
++      this.rxBytes += u8.byteLength;
++      this.rxNotifications += 1;
++      this.onTextChunk(this._dec.decode(u8, { stream: true }));
+     };
++    // Attach the listener first so nothing sent right after subscribe is missed.
+     chr.addEventListener("characteristicvaluechanged", this._onNotify);
++    await chr.startNotifications();
+   }
+ 
+   async disconnect() {
+@@ -109,11 +117,12 @@
+     for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+       const chunk = bytes.slice(i, i + CHUNK_SIZE);
+ 
+-      // Prefer writeWithoutResponse if available
+-      if (this.char.properties?.writeWithoutResponse) {
+-        await this.char.writeValueWithoutResponse(chunk);
+-      } else {
++      // Prefer acknowledged writes: write-without-response has no flow control,
++      // so a small UART bridge buffer on the reader silently drops bytes.
++      if (this.char.properties?.write) {
+         await this.char.writeValue(chunk);
++      } else {
++        await this.char.writeValueWithoutResponse(chunk);
+       }
+ 
+       // Small delay helps stability on mobile stacks
+diff -ruN orig/wand/verify.js Agrident-Web-Utility-main/wand/verify.js
+--- orig/wand/verify.js	1970-01-01 00:00:00.000000000 +0000
++++ Agrident-Web-Utility-main/wand/verify.js	2026-11-21 10:01:18.912744527 +0000
+@@ -0,0 +1,124 @@
++// wand/verify.js
++// Self-verifying downloads for lossy links (BLE). Serial passes the first time;
++// a lossy BLE link triggers automatic re-downloads instead of silently returning bad data.
++
++const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
++
++/** Most common field count across rows (the "expected" shape). */
++export function modalLength(rows) {
++  const freq = new Map();
++  for (const r of rows) freq.set(r.length, (freq.get(r.length) || 0) + 1);
++  let best = 0, bestN = -1;
++  for (const [len, n] of freq) if (n > bestN) { best = len; bestN = n; }
++  return best;
++}
++
++/** Rows whose field count differs from the rest: the signature of two rows merged by a lost chunk. */
++export function countSuspectRows(rows) {
++  if (!rows.length) return 0;
++  const m = modalLength(rows);
++  return rows.filter((r) => r.length !== m).length;
++}
++
++const signature = (rows) => JSON.stringify(rows);
++
++// Rows that start with a strictly increasing integer (record number) can be merged across attempts.
++const isSeqKeyed = (rows) =>
++  rows.length > 0 &&
++  rows.every((r) => /^\d+$/.test(String(r[0] ?? ""))) &&
++  rows.every((r, i) => i === 0 || Number(r[0]) > Number(rows[i - 1][0]));
++
++/**
++ * Run `fetchOnce(attempt, maxAttempts)` (returns an array of raw rows) until the data is trustworthy.
++ *
++ * A lossy BLE link drops different rows on every attempt, so a perfectly clean download may never
++ * happen. When rows carry an increasing record number, results are MERGED across attempts:
++ *   - done when the merged set reaches `expectedCount` (if known), otherwise
++ *   - done when an attempt (after the first) adds no new rows.
++ * Otherwise (no usable record numbers) one download must be well-formed and either match
++ * `expectedCount` or be identical to the previous download.
++ *
++ * Throws instead of returning data that may be missing rows.
++ */
++export async function verifiedDownload(fetchOnce, { expectedCount = null, maxAttempts = 6, session = null } = {}) {
++  const expected = (expectedCount !== null && expectedCount !== "" && Number.isFinite(Number(expectedCount)))
++    ? Number(expectedCount) : null;
++
++  const merged = new Map(); // record number -> row
++  let keyedAll = true;
++  let prevSig = null;
++  let noNewStreak = 0;
++  let best = null, lastErr = null;
++
++  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
++    let rows;
++    const droppedBefore = session?.stats?.droppedFragments ?? null;
++    try {
++      rows = await fetchOnce(attempt, maxAttempts);
++    } catch (e) {
++      lastErr = e;
++      console.warn(`[wand] download attempt ${attempt}/${maxAttempts} failed:`, e?.message || e);
++      session?.resetRx?.();
++      await sleep(500);
++      session?.resetRx?.();
++      prevSig = null;
++      continue;
++    }
++
++    // Drop merged rows (wrong field count) before anything else.
++    const m = modalLength(rows);
++    const clean = rows.filter((r) => r.length === m);
++    const suspect = rows.length - clean.length;
++
++    // Did the session see truncated frames during this attempt? null = unknown (no stats available).
++    const dropped = droppedBefore === null ? null : (session.stats.droppedFragments - droppedBefore);
++    // A first pass with no dropped fragments and no merged rows needs no confirming second pass
++    // (only when there is no expected count to check against).
++    const cleanFirstPass = attempt === 1 && expected === null && dropped === 0 && suspect === 0;
++
++    if (keyedAll && !isSeqKeyed(clean)) keyedAll = false;
++
++    if (keyedAll) {
++      let added = 0;
++      for (const r of clean) {
++        if (!merged.has(r[0])) { merged.set(r[0], r); added++; }
++      }
++      noNewStreak = added === 0 ? noNewStreak + 1 : 0;
++      console.info(`[wand] attempt ${attempt}/${maxAttempts}: got ${clean.length} rows, +${added} new, ${merged.size} total` +
++        (expected !== null ? ` of ${expected}` : "") + (suspect ? `, ${suspect} malformed dropped` : "") +
++        (dropped ? `, ${dropped} truncated frames` : ""));
++
++      const done = expected !== null
++        ? merged.size >= expected
++        : (cleanFirstPass || (attempt >= 2 && added === 0));
++      if (done) return [...merged.values()].sort((a, b) => Number(a[0]) - Number(b[0]));
++      continue;
++    }
++
++    // Fallback: whole-download verification.
++    const sig = signature(rows);
++    const countOk = expected !== null && rows.length === expected;
++    const repeatOk = prevSig !== null && sig === prevSig;
++    if (suspect === 0 && (countOk || repeatOk || cleanFirstPass)) return rows;
++    console.warn(`[wand] attempt ${attempt}/${maxAttempts}: ${rows.length} rows` +
++      (expected !== null ? ` (expected ${expected})` : "") + `, ${suspect} malformed`);
++    if (!best || suspect < best.suspect || (suspect === best.suspect && rows.length > best.rows)) {
++      best = { rows: rows.length, suspect };
++    }
++    prevSig = suspect === 0 ? sig : null;
++  }
++
++  // Keyed merge that never reached the expected count: accept only if it has stopped growing
++  // (the device's count probably disagrees with the task list), and say so.
++  if (keyedAll && merged.size && noNewStreak >= 2) {
++    console.warn(`[wand] merged ${merged.size} rows; stable across attempts` +
++      (expected !== null ? ` but expected ${expected}` : ""));
++    return [...merged.values()].sort((a, b) => Number(a[0]) - Number(b[0]));
++  }
++
++  const detail = keyedAll && merged.size
++    ? ` Got ${merged.size}${expected !== null ? ` of ${expected}` : ""} rows.`
++    : best ? ` Best attempt: ${best.rows} rows${expected !== null ? ` of ${expected}` : ""}, ${best.suspect} malformed.`
++    : (lastErr ? ` Last error: ${lastErr.message || lastErr}` : "");
++  throw new Error(`Download could not be verified after ${maxAttempts} attempts (lossy link?).${detail}`);
++}

@@ -13,6 +13,8 @@ export class SerialTransport {
     this.reader = null;
     this.writer = null;
     this._reading = false;
+    // Streaming decoder: a multi-byte char split across two reads must not become U+FFFD.
+    this._dec = new TextDecoder();
   }
 
   get isConnected() { return !!this.port; }
@@ -47,7 +49,7 @@ export class SerialTransport {
     while (this._reading) {
       const { value, done } = await this.reader.read();
       if (done) break;
-      if (value) this.onTextChunk(dec.decode(value));
+      if (value) this.onTextChunk(this._dec.decode(value, { stream: true }));
     }
   }
 }
@@ -58,6 +60,9 @@ export class BleTransport {
     this.device = null;
     this.char = null;
     this._onNotify = null;
+    this._dec = new TextDecoder();
+    this.rxBytes = 0; // diagnostics: total bytes received via notifications
+    this.rxNotifications = 0;
   }
 
   get isConnected() { return !!this.char; }
@@ -76,13 +81,16 @@ export class BleTransport {
     const chr = await svc.getCharacteristic(UUID_BATT_CHR);
     this.char = chr;
 
-    await chr.startNotifications();
+    this._dec = new TextDecoder();
     this._onNotify = (ev) => {
       const u8 = u8FromDV(ev.target.value);
-      const chunk = dec.decode(u8);
-      this.onTextChunk(chunk);
+      this.rxBytes += u8.byteLength;
+      this.rxNotifications += 1;
+      this.onTextChunk(this._dec.decode(u8, { stream: true }));
     };
+    // Attach the listener first so nothing sent right after subscribe is missed.
     chr.addEventListener("characteristicvaluechanged", this._onNotify);
+    await chr.startNotifications();
   }
 
   async disconnect() {
@@ -109,11 +117,12 @@ export class BleTransport {
     for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
       const chunk = bytes.slice(i, i + CHUNK_SIZE);
 
-      // Prefer writeWithoutResponse if available
-      if (this.char.properties?.writeWithoutResponse) {
-        await this.char.writeValueWithoutResponse(chunk);
-      } else {
+      // Prefer acknowledged writes: write-without-response has no flow control,
+      // so a small UART bridge buffer on the reader silently drops bytes.
+      if (this.char.properties?.write) {
         await this.char.writeValue(chunk);
+      } else {
+        await this.char.writeValueWithoutResponse(chunk);
       }
 
       // Small delay helps stability on mobile stacks
