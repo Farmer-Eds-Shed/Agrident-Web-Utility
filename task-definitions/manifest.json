@@ -1,3 +1,5 @@
 {
-  "templates": []
+  "templates": [
+    { "name": "Manual Weighing", "file": "manual_weigh.tsk" }
+  ]
 }
