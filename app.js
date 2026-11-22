@@ -106,6 +106,7 @@ refreshTaskSlotOptions();
 function rerenderTaskDefinition() {
   const connected = !!transport?.isConnected;
   els.openTaskUploadBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading;
+  els.initialiseAllTasksBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading;
   els.taskDefinitionFile.disabled = !connected || sessionBusy || taskDefinitionUploading;
   els.taskTemplateSelect.disabled = !connected || sessionBusy || taskDefinitionUploading;
   els.refreshTaskTemplatesBtn.disabled = sessionBusy || taskDefinitionUploading;
@@ -808,6 +809,47 @@ els.syncTasksBtn.addEventListener("click", async () => {
     alert(`Failed to sync tasks: ${e?.message || e}`);
   } finally {
     els.syncTasksBtn.disabled = !(transport?.isConnected);
+  }
+});
+
+// TaskTool AWR250 V2.15 capture: [CIB|1000|9] -> echo -> [CIBOK].
+// Exact effect on recorded task data has not been independently verified.
+els.initialiseAllTasksBtn.addEventListener("click", async () => {
+  if (!transport?.isConnected || !session || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading) return;
+  const confirmation = prompt(
+    "DANGER: Initialise ALL tasks on the reader. This may remove every task definition and potentially recorded task data. This cannot be undone.\n\nType DELETE ALL TASKS to proceed:"
+  );
+  if (confirmation !== "DELETE ALL TASKS") return;
+  if (!confirm("Final confirmation: send [CIB|1000|9] to initialise ALL tasks?")) return;
+
+  taskDefinitionUploading = true;
+  rerenderTaskDefinition();
+  try {
+    await session.send("[CIB|1000|9]", {
+      name: "Initialise all tasks",
+      okToken: "CIBOK",
+    });
+    // Never continue using the old catalogue after a destructive command.
+    taskCatalogueLoaded = false;
+    tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+    refreshTaskSlotOptions();
+    rerenderTasks();
+    try {
+      tasks = await fetchTasks(session);
+      taskCatalogueLoaded = true;
+      refreshTaskSlotOptions();
+      els.syncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
+      rerenderTasks();
+      alert("Initialisation acknowledged. Task list refreshed; verify the reader's task slots.");
+    } catch (refreshError) {
+      alert(`Initialisation acknowledged, but Get Tasks failed: ${refreshError.message}. Run Get Tasks before uploading.`);
+    }
+  } catch (e) {
+    taskCatalogueLoaded = false;
+    alert(`Initialisation not confirmed: ${e?.message || e}. The reader may still have processed the command; run Get Tasks to inspect its state.`);
+  } finally {
+    taskDefinitionUploading = false;
+    rerenderTaskDefinition();
   }
 });
 
