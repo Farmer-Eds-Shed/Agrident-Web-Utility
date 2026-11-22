@@ -536,7 +536,7 @@ async function connect() {
     // reset state
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
     taskDefinitionCommands = []; taskDefinitionName = "";
-  taskCatalogueLoaded = false;
+    taskCatalogueLoaded = false;
     taskCatalogueLoaded = false;
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
@@ -614,6 +614,7 @@ async function cleanup() {
 
   tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
   taskDefinitionCommands = []; taskDefinitionName = "";
+  taskCatalogueLoaded = false;
   groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
 
   tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
@@ -809,11 +810,12 @@ els.syncTasksBtn.addEventListener("click", async () => {
     alert(`Failed to sync tasks: ${e?.message || e}`);
   } finally {
     els.syncTasksBtn.disabled = !(transport?.isConnected);
+    rerenderTaskDefinition();
   }
 });
 
 // TaskTool AWR250 V2.15 capture: [CIB|1000|9] -> echo -> [CIBOK].
-// Exact effect on recorded task data has not been independently verified.
+// This permanently erases all task definitions and all recorded task data.
 els.initialiseAllTasksBtn.addEventListener("click", async () => {
   if (!transport?.isConnected || !session || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading) return;
   const confirmation = prompt(
