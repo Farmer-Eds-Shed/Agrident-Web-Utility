@@ -27,6 +27,7 @@ export function getEls() {
     // tasks UI
     syncTasksBtn: document.getElementById("syncTasksBtn"),
     taskDefinitionFile: document.getElementById("taskDefinitionFile"),
+    taskDefinitionSlot: document.getElementById("taskDefinitionSlot"),
     uploadTaskDefinitionBtn: document.getElementById("uploadTaskDefinitionBtn"),
     taskDefinitionMeta: document.getElementById("taskDefinitionMeta"),
     taskDefinitionPreview: document.getElementById("taskDefinitionPreview"),
