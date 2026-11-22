@@ -652,9 +652,9 @@ els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
   const commands = [...taskDefinitionCommands];
   const risks = commands.filter((c) => /^\[(?:XE|RESET|FORMAT)/i.test(c));
   const warning = risks.length
-    ? `WARNING: ${risks.length} command(s) appear destructive (erase/reset/format). Review the preview carefully.\\n\\n`
+    ? `WARNING: ${risks.length} command(s) appear destructive (erase/reset/format). Review the preview carefully.\n\n`
     : "";
-  if (!confirm(`${warning}Send ${commands.length} task-definition commands from "${taskDefinitionName}" to the wand?\\n\\nThe reader may change its configured tasks. The upload cannot be rolled back automatically.`)) return;
+  if (!confirm(`${warning}Send ${commands.length} task-definition commands from "${taskDefinitionName}" to the wand?\n\nThe reader may change its configured tasks. The upload cannot be rolled back automatically.`)) return;
 
   taskDefinitionUploading = true;
   rerenderTaskDefinition();
