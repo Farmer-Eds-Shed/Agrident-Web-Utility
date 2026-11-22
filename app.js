@@ -93,6 +93,7 @@ for (let slot = 1; slot <= 20; slot++) {
 
 function rerenderTaskDefinition() {
   const connected = !!transport?.isConnected;
+  els.openTaskUploadBtn.disabled = !connected || sessionBusy || taskDefinitionUploading;
   els.taskDefinitionFile.disabled = !connected || sessionBusy || taskDefinitionUploading;
   els.taskDefinitionSlot.disabled = !connected || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
   els.uploadTaskDefinitionBtn.disabled = !connected || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
@@ -634,6 +635,32 @@ els.disconnectBtn.addEventListener("click", cleanup);
 
 els.preferGroupXEl?.addEventListener("change", () => {
   preferGroupX = !!els.preferGroupXEl.checked;
+});
+
+// The Tasks panel stays compact; upload configuration lives in a separate dialog.
+function setTaskUploadOpen(open) {
+  if (taskDefinitionUploading && !open) return;
+  els.taskUploadOverlay.classList.toggle("show", open);
+  els.taskUploadOverlay.setAttribute("aria-hidden", String(!open));
+  if (open) {
+    rerenderTaskDefinition();
+    els.taskDefinitionFile.focus();
+  } else {
+    els.openTaskUploadBtn.focus();
+  }
+}
+
+els.openTaskUploadBtn.addEventListener("click", () => setTaskUploadOpen(true));
+els.closeTaskUploadBtn.addEventListener("click", () => setTaskUploadOpen(false));
+els.cancelTaskUploadBtn.addEventListener("click", () => setTaskUploadOpen(false));
+els.taskUploadOverlay.addEventListener("click", (event) => {
+  if (event.target === els.taskUploadOverlay) setTaskUploadOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && els.taskUploadOverlay.classList.contains("show")) {
+    event.preventDefault();
+    setTaskUploadOpen(false);
+  }
 });
 
 // Task definition files are command streams, not exported task data.
