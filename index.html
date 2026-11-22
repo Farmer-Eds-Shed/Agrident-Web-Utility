@@ -125,6 +125,7 @@
         <div class="toolbarPrimary">
           <button class="btn btnPrimary" id="syncTasksBtn" disabled>Get Tasks</button>
           <button class="btn" id="downloadCsvBtn" disabled>Download CSV</button>
+          <button class="btn" id="openTaskUploadBtn" disabled>Upload Task Definition…</button>
         </div>
 
         <div class="toolbarControls">
@@ -140,27 +141,6 @@
             <input id="taskFilter" type="text" placeholder="Search…" disabled>
           </div>
         </div>
-      </div>
-
-      <div class="toolbar">
-        <div class="toolbarControls toolbarControlsWide">
-          <div class="fieldInline">
-            <label class="muted" for="taskDefinitionFile">Load Task Definition (.tsk)</label>
-            <input id="taskDefinitionFile" type="file" accept=".tsk,.txt,text/plain" disabled>
-          </div>
-          <div class="fieldInline">
-            <label class="muted" for="taskDefinitionSlot">Destination slot (wand menu)</label>
-            <select id="taskDefinitionSlot" disabled></select>
-          </div>
-        </div>
-        <div class="toolbarSecondary">
-          <button class="btn btnPrimary" id="uploadTaskDefinitionBtn" disabled>Upload Definition → Wand</button>
-        </div>
-        <div class="muted mt8" id="taskDefinitionMeta" aria-live="polite">No task definition loaded.</div>
-        <details class="mt8">
-          <summary>Task definition commands (review before upload)</summary>
-          <pre id="taskDefinitionPreview" class="scroll" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px"></pre>
-        </details>
       </div>
 
       <div class="panelHeader">
@@ -317,6 +297,37 @@
     </section>
 
   </main>
+
+  <!-- Task definition upload dialog -->
+  <div id="taskUploadOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="taskUploadTitle" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHeader">
+        <div class="modalTitle" id="taskUploadTitle">Upload Task Definition</div>
+        <span class="modalHeaderSpacer"></span>
+        <button class="btn btnSmall" id="closeTaskUploadBtn" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="modalBody">
+        <div class="fieldInline">
+          <label for="taskDefinitionFile">Task definition (.tsk)</label>
+          <input id="taskDefinitionFile" type="file" accept=".tsk,.txt,text/plain">
+        </div>
+        <div class="fieldInline" style="margin-top:12px;">
+          <label for="taskDefinitionSlot">Destination slot (wand menu)</label>
+          <select id="taskDefinitionSlot" disabled></select>
+        </div>
+        <div class="muted" style="margin-top:12px;" id="taskDefinitionMeta" aria-live="polite">No task definition loaded.</div>
+        <div class="muted" style="margin-top:6px;">The selected slot may be replaced. The original file is not changed.</div>
+        <details style="margin-top:12px;">
+          <summary>Preview commands to be sent</summary>
+          <pre id="taskDefinitionPreview" class="scroll" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px"></pre>
+        </details>
+      </div>
+      <div class="modalFooter">
+        <button class="btn" id="cancelTaskUploadBtn" type="button">Cancel</button>
+        <button class="btn btnPrimary" id="uploadTaskDefinitionBtn" type="button" disabled>Upload to Wand</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal editor -->
   <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">
