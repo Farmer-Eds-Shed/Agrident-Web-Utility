@@ -20,10 +20,12 @@ This is a refactor skeleton: functionality should match the original page,
 while the logic gradually moves out of `app.js` into modules.
 
 ## Upload task definitions (.tsk)
-Connect to the reader using BLE or USB Serial, open **Tasks**, and choose a
-`.tsk` command file. The **Destination slot** selector defaults to the slot encoded in the file (1–20,\nmatching the wand menu). Changing the selection rewrites only the CCD and CIN\nslot numbers; the original file is not modified. Review the resulting frames\nbefore clicking **Upload Definition → Wand**. The destination may be replaced.
+Connect to the reader using BLE or USB Serial, open **Tasks**, click **Upload Task Definition…**, and choose a
+`.tsk` command file in the dialog. The **Destination slot** selector defaults to the slot encoded in the file (1–20,\nmatching the wand menu). Changing the selection rewrites only the CCD and CIN\nslot numbers; the original file is not modified. Review the resulting frames\nbefore clicking **Upload Definition → Wand**. The destination may be replaced.
 The upload sends each bracketed command in file order and waits for the\nreader's matching command-specific OK acknowledgement before continuing. It does **not** erase tasks automatically; any erase/reset commands
 included in the file are sent as written and flagged in the confirmation.
 
 **Important:** Each command must receive its matching OK acknowledgement.\nThis still does not prove that the task is persisted. The task list is refreshed after upload; confirm the new task exists\nin the selected wand-menu slot. Test on a spare reader
 before using production task configurations. The acknowledgement mapping is based on an AWR250 V2.15 serial capture.
+
+Task numbers displayed in the downloader are one-based to match the wand menu; underlying reader command indices remain zero-based.
