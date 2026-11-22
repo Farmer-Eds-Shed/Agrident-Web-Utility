@@ -23,7 +23,7 @@ export function renderTasksDropdown(els, tasks, { isConnected }) {
   els.taskSelect.appendChild(new Option("(select a task…)", "", true, false));
   for (const t of tasks) {
     els.taskSelect.appendChild(
-      new Option(`${t.idx}: ${t.name} (${t.count})`, String(t.idx))
+      new Option(`Task ${Number(t.idx) + 1}: ${t.name} (${t.count})`, String(t.idx))
     );
   }
 
@@ -111,7 +111,7 @@ export function renderTaskPreview(
   }
 
   els.previewMeta.textContent = selectedTask
-    ? `Task ${selectedTask.idx}: ${selectedTask.name} — ${taskRows.length} record(s), ${headers.length} column(s).`
+    ? `Task ${Number(selectedTask.idx) + 1}: ${selectedTask.name} — ${taskRows.length} record(s), ${headers.length} column(s).`
     : "No task selected.";
 
   els.downloadCsvBtn.disabled = !(isConnected && (taskRows?.length || 0) > 0);
