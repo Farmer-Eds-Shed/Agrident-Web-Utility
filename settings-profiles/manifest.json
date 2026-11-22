@@ -1,0 +1,10 @@
+{
+  "profiles": [
+    {
+      "id": "herdapp-ble",
+      "name": "HerdApp — BLE",
+      "file": "herdapp-ble.json",
+      "description": "Set AWR250 Bluetooth to Slave / BLE without changing other reader settings."
+    }
+  ]
+}
