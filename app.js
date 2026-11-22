@@ -26,7 +26,7 @@ import { fetchTasks, fetchTaskHeaders, fetchTaskRows, fetchTaskRowsVerified } fr
 import { fetchGroups, fetchGroupRows } from "./wand/commands/groups.js";
 
 import { parseCSV } from "./parsers/csv_import.js";
-import { readTextFile, parseTskCommands, uploadTskCommands } from "./configs/tsk.js";
+import { readTextFile, parseTskCommands, uploadTskCommands, getTskSlot, setTskSlot } from "./configs/tsk.js";
 
 import { fetchTaglist, eraseTaglist, uploadTaglist } from "./wand/commands/taglist.js";
 import { fetchAlerts, eraseAlerts, uploadAlerts } from "./wand/commands/alerts.js";
@@ -86,11 +86,19 @@ let taskDefinitionCommands = [];
 let taskDefinitionName = "";
 let taskDefinitionUploading = false;
 
+for (let slot = 1; slot <= 20; slot++) {
+  els.taskDefinitionSlot.add(new Option(`Task ${slot}`, String(slot)));
+}
+
+
 function rerenderTaskDefinition() {
   const connected = !!transport?.isConnected;
   els.taskDefinitionFile.disabled = !connected || sessionBusy || taskDefinitionUploading;
+  els.taskDefinitionSlot.disabled = !connected || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
   els.uploadTaskDefinitionBtn.disabled = !connected || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
-  els.taskDefinitionPreview.textContent = taskDefinitionCommands.join("\n");
+  const slot = Number(els.taskDefinitionSlot.value);
+  els.taskDefinitionPreview.textContent = taskDefinitionCommands.length
+    ? setTskSlot(taskDefinitionCommands, slot).join("\n") : "";
   els.taskDefinitionMeta.textContent = taskDefinitionCommands.length
     ? `${taskDefinitionName} — ${taskDefinitionCommands.length} commands loaded. Review before uploading.`
     : "No task definition loaded.";
@@ -637,8 +645,10 @@ els.taskDefinitionFile.addEventListener("change", async () => {
   try {
     if (file.size > 1024 * 1024) throw new Error("Task definition exceeds 1 MB");
     const commands = parseTskCommands(await readTextFile(file));
+    const originalSlot = getTskSlot(commands);
     taskDefinitionCommands = commands;
     taskDefinitionName = file.name;
+    els.taskDefinitionSlot.value = String(originalSlot);
   } catch (e) {
     alert(`Cannot load task definition: ${e?.message || e}`);
     els.taskDefinitionFile.value = "";
@@ -646,15 +656,18 @@ els.taskDefinitionFile.addEventListener("change", async () => {
   rerenderTaskDefinition();
 });
 
+els.taskDefinitionSlot.addEventListener("change", rerenderTaskDefinition);
+
 els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
   if (!transport?.isConnected || !session || sessionBusy || taskDefinitionUploading) return;
   if (!taskDefinitionCommands.length) return;
-  const commands = [...taskDefinitionCommands];
+  const destinationSlot = Number(els.taskDefinitionSlot.value);
+  const commands = setTskSlot(taskDefinitionCommands, destinationSlot);
   const risks = commands.filter((c) => /^\[(?:XE|RESET|FORMAT)/i.test(c));
   const warning = risks.length
     ? `WARNING: ${risks.length} command(s) appear destructive (erase/reset/format). Review the preview carefully.\n\n`
     : "";
-  if (!confirm(`${warning}Send ${commands.length} task-definition commands from "${taskDefinitionName}" to the wand?\n\nThe reader may change its configured tasks. The upload cannot be rolled back automatically.`)) return;
+  if (!confirm(`${warning}Upload "${taskDefinitionName}" to Task ${destinationSlot} (wand menu)?\n\nThis may REPLACE the existing definition in Task ${destinationSlot}. The upload cannot be rolled back automatically.`)) return;
 
   taskDefinitionUploading = true;
   rerenderTaskDefinition();
@@ -664,10 +677,10 @@ els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
         els.taskDefinitionMeta.textContent = `Uploading task definition… ${i}/${total} commands acknowledged`;
       }
     });
-    // Invalidate downloaded task list so user explicitly refreshes it.
-    tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+    tasks = await fetchTasks(session);
+    els.syncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
     rerenderTasks();
-    alert("All task commands acknowledged by the reader. Use Get Tasks to verify the task appears and is saved.");
+    alert(`All task commands acknowledged. Task list refreshed; verify Task ${destinationSlot} appears in the wand menu.`);
   } catch (e) {
     alert(`Task definition upload stopped: ${e?.message || e}. The wand may have applied the commands already transmitted.`);
   } finally {
