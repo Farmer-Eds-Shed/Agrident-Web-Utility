@@ -26,6 +26,7 @@ import { fetchTasks, fetchTaskHeaders, fetchTaskRows, fetchTaskRowsVerified } fr
 import { fetchGroups, fetchGroupRows } from "./wand/commands/groups.js";
 
 import { parseCSV } from "./parsers/csv_import.js";
+import { readTextFile, parseTskCommands, uploadTskCommands } from "./configs/tsk.js";
 
 import { fetchTaglist, eraseTaglist, uploadTaglist } from "./wand/commands/taglist.js";
 import { fetchAlerts, eraseAlerts, uploadAlerts } from "./wand/commands/alerts.js";
@@ -81,6 +82,20 @@ let settingsDraftSource = "none"; // "device" | "json" | "none"
 let settingsInfo = null;       // bt/mac versions etc
 
 let sessionBusy = false;
+let taskDefinitionCommands = [];
+let taskDefinitionName = "";
+let taskDefinitionUploading = false;
+
+function rerenderTaskDefinition() {
+  const connected = !!transport?.isConnected;
+  els.taskDefinitionFile.disabled = !connected || sessionBusy || taskDefinitionUploading;
+  els.uploadTaskDefinitionBtn.disabled = !connected || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
+  els.taskDefinitionPreview.textContent = taskDefinitionCommands.join("\n");
+  els.taskDefinitionMeta.textContent = taskDefinitionCommands.length
+    ? `${taskDefinitionName} — ${taskDefinitionCommands.length} commands loaded. Review before uploading.`
+    : "No task definition loaded.";
+}
+
 
 // -----------------------
 // Transport + Session
@@ -104,6 +119,8 @@ function buildSession() {
       els.taskSelect.disabled = busy || !(transport?.isConnected && tasks.length);
       els.syncTasksBtn.disabled = busy || !(transport?.isConnected);
       els.downloadCsvBtn.disabled = busy || !(transport?.isConnected && taskRows.length);
+
+      rerenderTaskDefinition();
 
       // groups
       els.groupSelect.disabled = busy || !(transport?.isConnected && groups.length);
@@ -494,12 +511,14 @@ async function connect() {
 
     // reset state
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+    taskDefinitionCommands = []; taskDefinitionName = "";
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
     alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
     settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
 
     rerenderTasks();
+    rerenderTaskDefinition();
     rerenderGroups();
     rerenderTaglist();
     rerenderAlerts();
@@ -568,6 +587,7 @@ async function cleanup() {
   els.groupsSyncedAtEl.textContent = "";
 
   tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+  taskDefinitionCommands = []; taskDefinitionName = "";
   groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
 
   tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
@@ -575,6 +595,7 @@ async function cleanup() {
   settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
 
   rerenderTasks();
+  rerenderTaskDefinition();
   rerenderGroups();
   rerenderTaglist();
   rerenderAlerts();
@@ -605,6 +626,54 @@ els.disconnectBtn.addEventListener("click", cleanup);
 
 els.preferGroupXEl?.addEventListener("change", () => {
   preferGroupX = !!els.preferGroupXEl.checked;
+});
+
+// Task definition files are command streams, not exported task data.
+els.taskDefinitionFile.addEventListener("change", async () => {
+  taskDefinitionCommands = [];
+  taskDefinitionName = "";
+  const file = els.taskDefinitionFile.files?.[0];
+  if (!file) { rerenderTaskDefinition(); return; }
+  try {
+    if (file.size > 1024 * 1024) throw new Error("Task definition exceeds 1 MB");
+    const commands = parseTskCommands(await readTextFile(file));
+    taskDefinitionCommands = commands;
+    taskDefinitionName = file.name;
+  } catch (e) {
+    alert(`Cannot load task definition: ${e?.message || e}`);
+    els.taskDefinitionFile.value = "";
+  }
+  rerenderTaskDefinition();
+});
+
+els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
+  if (!transport?.isConnected || !session || sessionBusy || taskDefinitionUploading) return;
+  if (!taskDefinitionCommands.length) return;
+  const commands = [...taskDefinitionCommands];
+  const risks = commands.filter((c) => /^\[(?:XE|RESET|FORMAT)/i.test(c));
+  const warning = risks.length
+    ? `WARNING: ${risks.length} command(s) appear destructive (erase/reset/format). Review the preview carefully.\\n\\n`
+    : "";
+  if (!confirm(`${warning}Send ${commands.length} task-definition commands from "${taskDefinitionName}" to the wand?\\n\\nThe reader may change its configured tasks. The upload cannot be rolled back automatically.`)) return;
+
+  taskDefinitionUploading = true;
+  rerenderTaskDefinition();
+  try {
+    await uploadTskCommands(session, commands, {
+      onProgress: ({ i, total }) => {
+        els.taskDefinitionMeta.textContent = `Sending task definition… ${i}/${total} frames written`;
+      }
+    });
+    // Invalidate downloaded task list so user explicitly refreshes it.
+    tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+    rerenderTasks();
+    alert("All commands transmitted. Use Get Tasks to check the definition on the reader; device acceptance has not been verified.");
+  } catch (e) {
+    alert(`Task definition upload stopped: ${e?.message || e}. The wand may have applied the commands already transmitted.`);
+  } finally {
+    taskDefinitionUploading = false;
+    rerenderTaskDefinition();
+  }
 });
 
 // Sync Tasks
