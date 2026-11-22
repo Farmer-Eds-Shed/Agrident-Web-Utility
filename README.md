@@ -29,3 +29,23 @@ included in the file are sent as written and flagged in the confirmation.
 before using production task configurations. The acknowledgement mapping is based on an AWR250 V2.15 serial capture.
 
 Task numbers displayed in the downloader are one-based to match the wand menu; underlying reader command indices remain zero-based.
+
+### Repository task templates
+
+Task definitions can also be loaded from the **Repository template** dropdown in the
+Upload Task Definition dialog. Store plain-text `.tsk` files in `task-definitions/`
+and register them in `task-definitions/manifest.json`, for example:
+
+```json
+{
+  "templates": [
+    { "name": "Manual Weighing", "file": "manual_weigh.tsk" }
+  ]
+}
+```
+
+Only filenames containing letters, digits, underscores, or hyphens and ending in
+`.tsk` are accepted. Commit both the manifest and task files to the same branch
+as the deployed web utility. Templates are loaded read-only via relative URLs;
+no GitHub token is needed. The local file picker remains available. The manifest
+starts empty until you add your own task files.
