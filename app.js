@@ -537,7 +537,6 @@ async function connect() {
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
     taskDefinitionCommands = []; taskDefinitionName = "";
     taskCatalogueLoaded = false;
-    taskCatalogueLoaded = false;
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
     alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
