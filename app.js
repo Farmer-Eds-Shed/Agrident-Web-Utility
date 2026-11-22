@@ -661,13 +661,13 @@ els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
   try {
     await uploadTskCommands(session, commands, {
       onProgress: ({ i, total }) => {
-        els.taskDefinitionMeta.textContent = `Sending task definition… ${i}/${total} frames written`;
+        els.taskDefinitionMeta.textContent = `Uploading task definition… ${i}/${total} commands acknowledged`;
       }
     });
     // Invalidate downloaded task list so user explicitly refreshes it.
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
     rerenderTasks();
-    alert("All commands transmitted. Use Get Tasks to check the definition on the reader; device acceptance has not been verified.");
+    alert("All task commands acknowledged by the reader. Use Get Tasks to verify the task appears and is saved.");
   } catch (e) {
     alert(`Task definition upload stopped: ${e?.message || e}. The wand may have applied the commands already transmitted.`);
   } finally {
