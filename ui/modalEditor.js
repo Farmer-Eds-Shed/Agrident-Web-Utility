@@ -6,6 +6,8 @@ export function createModalEditor(els, {
   getHeaders,
   getSubtitle,
   onAfterChange,
+  makeField,
+  validateRow,
 }) {
   let editingMode = "tasks";
   let editingRealIndex = null;
@@ -38,8 +40,8 @@ export function createModalEditor(els, {
       label.title = h;
       label.textContent = h;
 
-      const inp = document.createElement("input");
-      inp.type = "text";
+      const inp = makeField?.(editingMode, realIndex, i, row) || document.createElement("input");
+      if (inp.tagName === "INPUT") inp.type = "text";
       inp.value = row[i] ?? "";
       inp.dataset.colIndex = String(i);
 
@@ -89,6 +91,8 @@ export function createModalEditor(els, {
     const idx = editingRealIndex;
 
     const updated = editingHeaders.map((h, i) => editingInputs[i]?.value ?? "");
+    const error = validateRow?.(editingMode, idx, updated);
+    if (error) { alert(error); return; }
     setRow(editingMode, idx, updated);
 
     closeEditor(true);
