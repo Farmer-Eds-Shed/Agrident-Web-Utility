@@ -428,6 +428,7 @@ function rerenderAlerts() {
 }
 
 function rerenderSettings() {
+  settingsProfiles?.updateButtons();
   const isConn = !!transport?.isConnected;
   const busy = !!sessionBusy;
 
