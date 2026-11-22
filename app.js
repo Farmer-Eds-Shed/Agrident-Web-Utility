@@ -1292,12 +1292,14 @@ els.uploadSettingsBtn.addEventListener("click", async () => {
     els.uploadSettingsBtn.disabled = true;
 
     await applySettings(session, settingsDraftRows, {
+      verify: true,
       onProgress: ({ i, total, row }) => {
-        els.settingsMeta.textContent = `Uploading… ${i}/${total} (${row.key || "?"})`;
+        els.settingsMeta.textContent = `Uploading and verifying… ${i}/${total} (${row.key || "?"})`;
       }
     });
 
-    els.settingsMeta.textContent = "Upload complete. Tip: Sync Device to confirm.";
+    settingsDeviceRows = await fetchSettings(session, SETTINGS_DEFAULT_DEFS);
+    els.settingsMeta.textContent = "Settings written and verified.";
   } catch (e) {
     alert(`Failed to upload settings: ${e?.message || e}`);
   } finally {
