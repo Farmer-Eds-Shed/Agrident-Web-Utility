@@ -18,7 +18,7 @@ export const SETTINGS_DICTIONARY = {
   bt_passkey: { label: "Bluetooth Passkey", gId: 32, pId: 20, sensitive: true, minLength: 1, maxLength: 8 },
   bt_peer_address: { label: "Bluetooth Peer Address", gId: 32, pId: 22, sensitive: true, pattern: "^[0-9a-fA-F]{12}$" },
   bt_baud: { label: "Bluetooth Baud Rate", gId: 32, pId: 3, connectionSensitive: true, options: { "0": "9600", "1": "19200", "3": "38400", "4": "57600", "5": "115200" } },
-  scale_type: { label: "Scale Type", gId: 33, pId: 1, options: { "0": "Tell", "1": "Iconix FX15", "2": "Tru-Test XR3000", "4": "BWT", "5": "Gallagher", "6": "Dini Argeo DFWLB", "7": "Te Pari", "8": "RHEWA 82c-2", "9": "CIMA-PTM", "10": "Gallagher W-1/TW", "11": "Tru-Test S3 (BLE)", "12": "Gallagher W-0 (BLE)" } },
+  scale_type: { label: "Scale Type", gId: 33, pId: 1, options: { "0": "Tell", "1": "Iconix FX15", "2": "Tru-Test XR3000", "3": "BWT", "4": "Gallagher", "5": "Dini Argeo DFWLB", "6": "Te Pari", "7": "RHEWA 82c-2", "8": "CIMA-PTM", "9": "Gallagher W-1/TW", "10": "Tru-Test S3 (BLE)", "11": "Gallagher W-0 (BLE)" } },
   scale_interface: { label: "Scale Interface", gId: 33, pId: 2, options: { "0": "RS232", "1": "Bluetooth" } },
   scale_baud: { label: "Scale Baud Rate", gId: 33, pId: 3, options: { "0": "300", "1": "600", "2": "1200", "3": "2400", "4": "4800", "5": "9600", "6": "19200", "7": "28800", "8": "38400", "9": "57600", "10": "115200" } },
   eid_display_format: { label: "EID Display Format", gId: 7, pId: 14, options: { "0": "Numeric (3-digit country code)", "16": "HEX", "32": "Alphanumeric (2-letter country code)" } },
