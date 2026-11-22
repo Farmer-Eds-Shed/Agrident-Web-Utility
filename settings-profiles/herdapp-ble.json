@@ -1,0 +1,15 @@
+{
+  "id": "herdapp-ble",
+  "name": "HerdApp — BLE",
+  "description": "Minimal connection profile validated against the supplied HerdApp-friendly reader export. Does not change baud rate, passkey, peer address, output or scale configuration.",
+  "settings": [
+    {
+      "key": "bt_mode",
+      "value": "2"
+    },
+    {
+      "key": "bt_profile",
+      "value": "3"
+    }
+  ]
+}
