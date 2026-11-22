@@ -22,6 +22,38 @@ export function parseTskCommands(text) {
   return lines;
 }
 
+// TaskTool uses slots 1–20; protocol uses 0–19. Only CCD and CIN
+// have been observed to carry the destination slot.
+export function getTskSlot(commands) {
+  const ccd = commands.find((c) => /^\[CCD\|\d+\]$/.test(c));
+  const cin = commands.find((c) => /^\[CIN\|\d+\|/.test(c));
+  if (!ccd || !cin) throw new Error("Task definition must contain CCD and CIN slot commands.");
+  const a = Number(/^\[CCD\|(\d+)\]$/.exec(ccd)[1]);
+  const b = Number(/^\[CIN\|(\d+)\|/.exec(cin)[1]);
+  if (a !== b || !Number.isInteger(a) || a < 0 || a > 19) {
+    throw new Error("CCD/CIN task slots disagree or are outside 0–19.");
+  }
+  if (commands.filter((c) => c.startsWith("[CCD|")).length !== 1 ||
+      commands.filter((c) => c.startsWith("[CIN|")).length !== 1) {
+    throw new Error("Expected exactly one CCD and one CIN command.");
+  }
+  return a + 1;
+}
+
+export function setTskSlot(commands, guiSlot) {
+  const slot = Number(guiSlot);
+  if (!Number.isInteger(slot) || slot < 1 || slot > 20) {
+    throw new Error("Select a destination task slot between 1 and 20.");
+  }
+  getTskSlot(commands); // validate source before rewriting
+  const idx = slot - 1;
+  return commands.map((frame) => {
+    if (/^\[CCD\|\d+\]$/.test(frame)) return `[CCD|${idx}]`;
+    if (/^\[CIN\|\d+\|/.test(frame)) return frame.replace(/^\[CIN\|\d+\|/, `[CIN|${idx}|`);
+    return frame;
+  });
+}
+
 // AWR250 capture: each CI*/CCD command is echoed, followed by [<CMD>OK].
 // Send one at a time and wait for the specific acknowledgement before advancing.
 export async function uploadTskCommands(session, commands, { onProgress } = {}) {
