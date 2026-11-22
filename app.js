@@ -86,6 +86,7 @@ let taskDefinitionCommands = [];
 let taskDefinitionName = "";
 let taskDefinitionUploading = false;
 let taskCatalogueLoaded = false;
+let repositoryTaskTemplates = [];
 
 function refreshTaskSlotOptions() {
   const selected = els.taskDefinitionSlot.value;
@@ -106,6 +107,8 @@ function rerenderTaskDefinition() {
   const connected = !!transport?.isConnected;
   els.openTaskUploadBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading;
   els.taskDefinitionFile.disabled = !connected || sessionBusy || taskDefinitionUploading;
+  els.taskTemplateSelect.disabled = !connected || sessionBusy || taskDefinitionUploading;
+  els.refreshTaskTemplatesBtn.disabled = sessionBusy || taskDefinitionUploading;
   els.taskDefinitionSlot.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
   els.uploadTaskDefinitionBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
   const slot = Number(els.taskDefinitionSlot.value);
@@ -532,6 +535,8 @@ async function connect() {
     // reset state
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
     taskDefinitionCommands = []; taskDefinitionName = "";
+  taskCatalogueLoaded = false;
+    taskCatalogueLoaded = false;
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
     alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
@@ -655,7 +660,8 @@ function setTaskUploadOpen(open) {
   els.taskUploadOverlay.setAttribute("aria-hidden", String(!open));
   if (open) {
     rerenderTaskDefinition();
-    els.taskDefinitionFile.focus();
+    if (!repositoryTaskTemplates.length) refreshRepositoryTaskTemplates();
+    els.taskTemplateSelect.focus();
   } else {
     els.openTaskUploadBtn.focus();
   }
@@ -674,10 +680,65 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// Repository templates are served as static assets alongside this web utility.
+// A manifest avoids relying on GitHub API calls, credentials, or directory listing.
+async function refreshRepositoryTaskTemplates() {
+  els.taskTemplateStatus.textContent = "Loading repository templates…";
+  els.refreshTaskTemplatesBtn.disabled = true;
+  try {
+    const response = await fetch("./task-definitions/manifest.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const manifest = await response.json();
+    if (!Array.isArray(manifest.templates)) throw new Error("Invalid task template manifest.");
+    repositoryTaskTemplates = manifest.templates.filter(t =>
+      typeof t.name === "string" && typeof t.file === "string" &&
+      /^[a-zA-Z0-9_-]+\.tsk$/.test(t.file));
+    els.taskTemplateSelect.replaceChildren(new Option("Choose a repository template…", ""));
+    for (const template of repositoryTaskTemplates) {
+      els.taskTemplateSelect.add(new Option(template.name, template.file));
+    }
+    els.taskTemplateStatus.textContent = repositoryTaskTemplates.length
+      ? `${repositoryTaskTemplates.length} repository template(s) available. Or choose a local file.`
+      : "No repository templates listed yet. You can still choose a local file.";
+  } catch (e) {
+    els.taskTemplateStatus.textContent = `Repository templates unavailable: ${e.message}. Local files still work.`;
+  } finally {
+    els.refreshTaskTemplatesBtn.disabled = sessionBusy || taskDefinitionUploading;
+  }
+}
+els.refreshTaskTemplatesBtn.addEventListener("click", refreshRepositoryTaskTemplates);
+els.taskTemplateSelect.addEventListener("change", async () => {
+  const file = els.taskTemplateSelect.value;
+  if (!file) return;
+  taskDefinitionCommands = [];
+  taskDefinitionName = "";
+  rerenderTaskDefinition();
+  try {
+    if (!/^[a-zA-Z0-9_-]+\.tsk$/.test(file) || !repositoryTaskTemplates.some(t => t.file === file)) {
+      throw new Error("Invalid repository template selection.");
+    }
+    const response = await fetch(`./task-definitions/${file}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    if (text.length > 1024 * 1024) throw new Error("Task definition exceeds 1 MB.");
+    const commands = parseTskCommands(text);
+    const originalSlot = getTskSlot(commands);
+    taskDefinitionCommands = commands;
+    taskDefinitionName = repositoryTaskTemplates.find(t => t.file === file).name;
+    els.taskDefinitionSlot.value = String(originalSlot);
+    els.taskDefinitionFile.value = "";
+  } catch (e) {
+    alert(`Cannot load repository template: ${e.message}`);
+    els.taskTemplateSelect.value = "";
+  }
+  rerenderTaskDefinition();
+});
+
 // Task definition files are command streams, not exported task data.
 els.taskDefinitionFile.addEventListener("change", async () => {
   taskDefinitionCommands = [];
   taskDefinitionName = "";
+  els.taskTemplateSelect.value = "";
   const file = els.taskDefinitionFile.files?.[0];
   if (!file) { rerenderTaskDefinition(); return; }
   try {
