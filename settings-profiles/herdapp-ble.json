@@ -1,7 +1,7 @@
 {
   "id": "herdapp-ble",
   "name": "HerdApp — BLE",
-  "description": "Minimal connection profile validated against the supplied HerdApp-friendly reader export. Does not change baud rate, passkey, peer address, output or scale configuration.",
+  "description": "HerdApp-compatible AWR250 settings: tag download format 1 is required for export compatibility; Bluetooth Slave/BLE and reading defaults are included. Unspecified settings remain unchanged.",
   "settings": [
     {
       "key": "bt_mode",
