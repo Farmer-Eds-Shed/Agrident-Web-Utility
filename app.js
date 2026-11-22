@@ -543,6 +543,7 @@ async function connect() {
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
     alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
     settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
+  settingsProfiles?.clearPreview();
 
     rerenderTasks();
     rerenderTaskDefinition();
@@ -621,6 +622,7 @@ async function cleanup() {
   tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
   alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
   settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
+  settingsProfiles?.clearPreview();
 
   rerenderTasks();
   rerenderTaskDefinition();
