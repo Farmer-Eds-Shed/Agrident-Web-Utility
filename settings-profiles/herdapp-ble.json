@@ -4,6 +4,26 @@
   "description": "HerdApp-compatible AWR250 settings: tag download format 1 is required for export compatibility; Bluetooth Slave/BLE and reading defaults are included. Unspecified settings remain unchanged.",
   "settings": [
     {
+      "key": "tag_download_format",
+      "value": "1"
+    },
+    {
+      "key": "read_mode",
+      "value": "3"
+    },
+    {
+      "key": "single_read_time",
+      "value": "10"
+    },
+    {
+      "key": "continuous_read_time",
+      "value": "60"
+    },
+    {
+      "key": "check_doublereads",
+      "value": "100"
+    },
+    {
       "key": "bt_mode",
       "value": "2"
     },
