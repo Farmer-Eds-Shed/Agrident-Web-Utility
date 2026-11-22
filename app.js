@@ -29,6 +29,7 @@ import { parseCSV } from "./parsers/csv_import.js";
 import { readTextFile, parseTskCommands, uploadTskCommands, getTskSlot, setTskSlot } from "./configs/tsk.js";
 
 import { fetchTaglist, eraseTaglist, uploadTaglist } from "./wand/commands/taglist.js";
+import { setupSettingsProfiles } from "./configs/settingsProfilesUI.js";
 import { fetchAlerts, eraseAlerts, uploadAlerts } from "./wand/commands/alerts.js";
 
 import { renderTaglistPreview, TAGLIST_HEADERS } from "./ui/renderTaglist.js";
@@ -1166,6 +1167,16 @@ els.alertsFilter?.addEventListener("input", () => rerenderAlerts());
 // -----------------------
 // Settings
 // -----------------------
+const settingsProfiles = setupSettingsProfiles({
+  getSession: () => session,
+  getTransport: () => transport,
+  isBusy: () => sessionBusy,
+  onSnapshot: async () => {
+    settingsDeviceRows = await fetchSettings(session, SETTINGS_DEFAULT_DEFS);
+    rerenderSettings();
+  }
+});
+
 els.syncSettingsBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
