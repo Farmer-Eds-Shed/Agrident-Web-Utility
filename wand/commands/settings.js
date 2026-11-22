@@ -1,3 +1,4 @@
+import { validateSettingValue } from "../../configs/settingsDictionary.js";
 // wand/commands/settings.js
 // IMPORTANT: XSPARV replies are seen as [XSPARVOK] in Agri-Link capture (note the V).
 
@@ -110,27 +111,34 @@ export async function fetchSettings(session, defs = SETTINGS_DEFAULT_DEFS) {
   return rows;
 }
 
-export async function applySettings(session, rows, { onProgress } = {}) {
-  let i = 0;
-  const total = rows.length;
-
-  for (const r of rows) {
-    i += 1;
-    onProgress?.({ i, total, row: r });
-
+export async function applySettings(session, rows, { onProgress, verify = false } = {}) {
+  const known = new Map(SETTINGS_DEFAULT_DEFS.map(def => [def.key, def]));
+  const writes = rows.filter(r => String(r.value ?? "").trim() !== "");
+  // Validate everything before sending any commands; never silently skip a row.
+  const prepared = writes.map(r => {
     const key = String(r.key ?? "").trim();
-    const value = String(r.value ?? "").trim();
-    if (!key || value === "") continue;
+    const def = known.get(key);
+    if (!def) throw new Error("Unknown setting: " + key);
+    const value = String(r.value).trim();
+    const error = validateSettingValue(key, value);
+    if (error) throw new Error(key + ": " + error);
+    return { key, value, def };
+  });
 
-    if (key === "tag_download_format") {
-      await setTagFormat(session, value);
-      await sleep(20);
-      continue;
-    }
-
-    if (r.gId != null && r.pId != null) {
-      await setParv(session, r.gId, r.pId, value);
-      await sleep(20);
+  let i = 0;
+  for (const { key, value, def } of prepared) {
+    i += 1;
+    onProgress?.({ i, total: prepared.length, row: { key, value } });
+    if (def.kind === "tagformat") await setTagFormat(session, value);
+    else if (def.kind === "parv") await setParv(session, def.gId, def.pId, value);
+    else throw new Error("Unsupported setting type: " + key);
+    await sleep(20);
+    if (verify) {
+      const [actual] = await fetchSettings(session, [def]);
+      if (String(actual?.value ?? "").trim() !== value) {
+        throw new Error(key + ": reader did not retain " + value + " (read back " + (actual?.value ?? "nothing") + ")");
+      }
     }
   }
+  return prepared.length;
 }
