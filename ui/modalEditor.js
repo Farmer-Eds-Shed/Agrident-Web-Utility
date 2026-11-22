@@ -59,6 +59,27 @@ export function createModalEditor(els, {
       editingInputs.push(inp);
     }
 
+    // For a new settings row, choosing a key refreshes its label and value control.
+    if (editingMode === "settings" && !row[0] && editingInputs[0]) {
+      editingInputs[0].addEventListener("change", () => {
+        const key = editingInputs[0].value;
+        const nextRow = [key, "", ""];
+        for (const col of [1, 2]) {
+          const old = editingInputs[col];
+          const next = makeField?.("settings", realIndex, col, nextRow) || document.createElement("input");
+          if (next.tagName === "INPUT") next.type = "text";
+          next.value = col === 1 ? (next.value || "") : "";
+          next.dataset.colIndex = String(col);
+          next.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); saveEditor(); }
+            if (ev.key === "Escape") { ev.preventDefault(); closeEditor(true); }
+          });
+          old.replaceWith(next);
+          editingInputs[col] = next;
+        }
+      });
+    }
+
     els.overlay.classList.add("show");
     els.overlay.setAttribute("aria-hidden", "false");
 
