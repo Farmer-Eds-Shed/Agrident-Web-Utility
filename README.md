@@ -49,3 +49,13 @@ Only filenames containing letters, digits, underscores, or hyphens and ending in
 as the deployed web utility. Templates are loaded read-only via relative URLs;
 no GitHub token is needed. The local file picker remains available. The manifest
 starts empty until you add your own task files.
+
+### Initialise all tasks (advanced)
+
+After **Get Tasks**, expand **Advanced task maintenance** in the Tasks tab and
+select **Initialise All Tasks…**. The action requires typing `DELETE ALL TASKS`
+and a second confirmation. It sends the exact TaskTool-captured AWR250 V2.15
+command `[CIB|1000|9]`, waits for `[CIBOK]`, invalidates the existing task
+catalogue, and tries to retrieve it again. If refresh fails, run **Get Tasks**
+before any upload. The exact impact on recorded task data has not been verified:
+treat the action as potentially destructive to both definitions and records.
