@@ -3,7 +3,7 @@
 // Numeric values are device protocol values, not array positions.
 // A missing options list means the setting needs a free-text/range editor or further documentation.
 export const SETTINGS_DICTIONARY = {
-  tag_download_format: { label: "Tag Download Format", command: "tagformat" },
+  tag_download_format: { label: "Tag Download Format", command: "tagformat", options: { "0": "ISO long (default)", "1": "Short ASCII 15 (HerdApp)", "2": "Short ASCII 16", "3": "NLIS", "4": "ISO 24631", "5": "HEX" } },
   read_mode: { label: "Read Mode", gId: 5, pId: 16, options: { "3": "Single Read", "4": "Continuous Read", "5": "Auto (Single/Continuous)" } },
   single_read_time: { label: "Single Read Time (seconds)", gId: 5, pId: 1, min: 1, max: 255 },
   continuous_read_time: { label: "Continuous Read Time (seconds)", gId: 5, pId: 17, min: 1, max: 255 },
