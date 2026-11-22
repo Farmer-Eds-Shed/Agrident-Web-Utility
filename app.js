@@ -85,18 +85,29 @@ let sessionBusy = false;
 let taskDefinitionCommands = [];
 let taskDefinitionName = "";
 let taskDefinitionUploading = false;
+let taskCatalogueLoaded = false;
 
-for (let slot = 1; slot <= 20; slot++) {
-  els.taskDefinitionSlot.add(new Option(`Task ${slot}`, String(slot)));
+function refreshTaskSlotOptions() {
+  const selected = els.taskDefinitionSlot.value;
+  const occupied = new Map(tasks.map(t => [Number(t.idx), t]));
+  els.taskDefinitionSlot.replaceChildren();
+  for (let slot = 1; slot <= 20; slot++) {
+    const task = occupied.get(slot - 1);
+    els.taskDefinitionSlot.add(new Option(task
+      ? `Task ${slot} — ${task.name} (occupied)`
+      : `Task ${slot} — Empty`, String(slot)));
+  }
+  if (selected) els.taskDefinitionSlot.value = selected;
 }
+refreshTaskSlotOptions();
 
 
 function rerenderTaskDefinition() {
   const connected = !!transport?.isConnected;
-  els.openTaskUploadBtn.disabled = !connected || sessionBusy || taskDefinitionUploading;
+  els.openTaskUploadBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading;
   els.taskDefinitionFile.disabled = !connected || sessionBusy || taskDefinitionUploading;
-  els.taskDefinitionSlot.disabled = !connected || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
-  els.uploadTaskDefinitionBtn.disabled = !connected || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
+  els.taskDefinitionSlot.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
+  els.uploadTaskDefinitionBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
   const slot = Number(els.taskDefinitionSlot.value);
   els.taskDefinitionPreview.textContent = taskDefinitionCommands.length
     ? setTskSlot(taskDefinitionCommands, slot).join("\n") : "";
@@ -686,7 +697,7 @@ els.taskDefinitionFile.addEventListener("change", async () => {
 els.taskDefinitionSlot.addEventListener("change", rerenderTaskDefinition);
 
 els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
-  if (!transport?.isConnected || !session || sessionBusy || taskDefinitionUploading) return;
+  if (!transport?.isConnected || !session || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading) return;
   if (!taskDefinitionCommands.length) return;
   const destinationSlot = Number(els.taskDefinitionSlot.value);
   const commands = setTskSlot(taskDefinitionCommands, destinationSlot);
@@ -694,7 +705,9 @@ els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
   const warning = risks.length
     ? `WARNING: ${risks.length} command(s) appear destructive (erase/reset/format). Review the preview carefully.\n\n`
     : "";
-  if (!confirm(`${warning}Upload "${taskDefinitionName}" to Task ${destinationSlot} (wand menu)?\n\nThis may REPLACE the existing definition in Task ${destinationSlot}. The upload cannot be rolled back automatically.`)) return;
+  const occupied = tasks.find(t => Number(t.idx) === destinationSlot - 1);
+  const overwriteWarning = occupied ? `\n\nTask ${destinationSlot} is OCCUPIED by "${occupied.name}" and may be replaced.` : "";
+  if (!confirm(`${warning}Upload "${taskDefinitionName}" to Task ${destinationSlot} (wand menu)?\n\nThis may REPLACE the existing definition in Task ${destinationSlot}. The upload cannot be rolled back automatically.${overwriteWarning}`)) return;
 
   taskDefinitionUploading = true;
   rerenderTaskDefinition();
@@ -705,6 +718,8 @@ els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
       }
     });
     tasks = await fetchTasks(session);
+    taskCatalogueLoaded = true;
+    refreshTaskSlotOptions();
     els.syncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
     rerenderTasks();
     alert(`All task commands acknowledged. Task list refreshed; verify Task ${destinationSlot} appears in the wand menu.`);
@@ -723,6 +738,8 @@ els.syncTasksBtn.addEventListener("click", async () => {
     els.syncTasksBtn.disabled = true;
 
     tasks = await fetchTasks(session);
+    taskCatalogueLoaded = true;
+    refreshTaskSlotOptions();
     els.syncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
 
     rerenderTasks();
