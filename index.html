@@ -142,6 +142,23 @@
         </div>
       </div>
 
+      <div class="toolbar">
+        <div class="toolbarControls toolbarControlsWide">
+          <div class="fieldInline">
+            <label class="muted" for="taskDefinitionFile">Load Task Definition (.tsk)</label>
+            <input id="taskDefinitionFile" type="file" accept=".tsk,.txt,text/plain" disabled>
+          </div>
+        </div>
+        <div class="toolbarSecondary">
+          <button class="btn btnPrimary" id="uploadTaskDefinitionBtn" disabled>Upload Definition → Wand</button>
+        </div>
+        <div class="muted mt8" id="taskDefinitionMeta" aria-live="polite">No task definition loaded.</div>
+        <details class="mt8">
+          <summary>Task definition commands (review before upload)</summary>
+          <pre id="taskDefinitionPreview" class="scroll" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px"></pre>
+        </details>
+      </div>
+
       <div class="panelHeader">
         <h3 class="mb6">Preview</h3>
         <div class="muted" id="previewMeta">No task selected.</div>
