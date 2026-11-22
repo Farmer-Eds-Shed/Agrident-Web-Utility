@@ -1,4 +1,4 @@
-import { validateSettingValue } from "../../configs/settingsDictionary.js";
+import { SETTINGS_DICTIONARY, validateSettingValue } from "../../configs/settingsDictionary.js";
 // wand/commands/settings.js
 // IMPORTANT: XSPARV replies are seen as [XSPARVOK] in Agri-Link capture (note the V).
 
@@ -112,7 +112,7 @@ export async function fetchSettings(session, defs = SETTINGS_DEFAULT_DEFS) {
 }
 
 export async function applySettings(session, rows, { onProgress, verify = false } = {}) {
-  const known = new Map(SETTINGS_DEFAULT_DEFS.map(def => [def.key, def]));
+  const known = new Map(Object.entries(SETTINGS_DICTIONARY).map(([key, def]) => [key, def.command === "tagformat" ? { key, label: def.label, kind: "tagformat" } : { key, label: def.label, kind: "parv", gId: def.gId, pId: def.pId }]));
   const writes = rows.filter(r => String(r.value ?? "").trim() !== "");
   // Validate everything before sending any commands; never silently skip a row.
   const prepared = writes.map(r => {
