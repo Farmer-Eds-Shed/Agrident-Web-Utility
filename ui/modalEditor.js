@@ -6,6 +6,8 @@ export function createModalEditor(els, {
   getHeaders,
   getSubtitle,
   onAfterChange,
+  makeField,
+  validateRow,
 }) {
   let editingMode = "tasks";
   let editingRealIndex = null;
@@ -26,7 +28,7 @@ export function createModalEditor(els, {
     editingHeaders = getHeaders(editingMode) || [];
     editingInputs = [];
 
-    els.modalTitle.textContent = "Edit Row";
+    els.modalTitle.textContent = editingMode === "settings" ? "Edit Reader Setting" : "Edit Row";
     els.modalSubtitle.textContent = getSubtitle(editingMode, realIndex);
 
     els.modalGrid.innerHTML = "";
@@ -36,10 +38,10 @@ export function createModalEditor(els, {
 
       const label = document.createElement("label");
       label.title = h;
-      label.textContent = h;
+      label.textContent = editingMode === "settings" ? (i === 0 ? "Setting" : i === 2 ? "Value" : h) : h;
 
-      const inp = document.createElement("input");
-      inp.type = "text";
+      const inp = makeField?.(editingMode, realIndex, i, row) || document.createElement("input");
+      if (inp.tagName === "INPUT") inp.type = "text";
       inp.value = row[i] ?? "";
       inp.dataset.colIndex = String(i);
 
@@ -50,11 +52,34 @@ export function createModalEditor(els, {
 
       const wrap = document.createElement("div");
       wrap.className = "field";
+      // Setting labels are derived from the dictionary; no need to edit them.
+      if (editingMode === "settings" && i === 1) wrap.hidden = true;
       wrap.appendChild(label);
       wrap.appendChild(inp);
 
       els.modalGrid.appendChild(wrap);
       editingInputs.push(inp);
+    }
+
+    // For a new settings row, choosing a key refreshes its label and value control.
+    if (editingMode === "settings" && !row[0] && editingInputs[0]) {
+      editingInputs[0].addEventListener("change", () => {
+        const key = editingInputs[0].value;
+        const nextRow = [key, "", ""];
+        for (const col of [1, 2]) {
+          const old = editingInputs[col];
+          const next = makeField?.("settings", realIndex, col, nextRow) || document.createElement("input");
+          if (next.tagName === "INPUT") next.type = "text";
+          next.value = col === 1 ? (next.value || "") : "";
+          next.dataset.colIndex = String(col);
+          next.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); saveEditor(); }
+            if (ev.key === "Escape") { ev.preventDefault(); closeEditor(true); }
+          });
+          old.replaceWith(next);
+          editingInputs[col] = next;
+        }
+      });
     }
 
     els.overlay.classList.add("show");
@@ -89,6 +114,8 @@ export function createModalEditor(els, {
     const idx = editingRealIndex;
 
     const updated = editingHeaders.map((h, i) => editingInputs[i]?.value ?? "");
+    const error = validateRow?.(editingMode, idx, updated);
+    if (error) { alert(error); return; }
     setRow(editingMode, idx, updated);
 
     closeEditor(true);

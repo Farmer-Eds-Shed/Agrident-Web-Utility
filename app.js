@@ -29,6 +29,8 @@ import { parseCSV } from "./parsers/csv_import.js";
 import { readTextFile, parseTskCommands, uploadTskCommands, getTskSlot, setTskSlot } from "./configs/tsk.js";
 
 import { fetchTaglist, eraseTaglist, uploadTaglist } from "./wand/commands/taglist.js";
+import { setupSettingsProfiles } from "./configs/settingsProfilesUI.js";
+import { SETTINGS_DICTIONARY, describeSettingValue, validateSettingValue } from "./configs/settingsDictionary.js";
 import { fetchAlerts, eraseAlerts, uploadAlerts } from "./wand/commands/alerts.js";
 
 import { renderTaglistPreview, TAGLIST_HEADERS } from "./ui/renderTaglist.js";
@@ -174,7 +176,48 @@ els.tabSettingsBtn?.addEventListener("click", () => tabs.setActiveTab("settings"
 // -----------------------
 // Modal Editor
 // -----------------------
+function settingsEditorField(mode, index, column, row) {
+  if (mode !== "settings") return null;
+  const key = String(row[0] || "");
+  const def = SETTINGS_DICTIONARY[key];
+  if (column === 0) {
+    const select = document.createElement("select");
+    select.add(new Option("Select setting…", ""));
+    for (const [k, d] of Object.entries(SETTINGS_DICTIONARY)) select.add(new Option(d.label, k));
+    select.value = key;
+    // Changing a setting requires a fresh edit so its value editor matches its type.
+    select.disabled = !!key;
+    return select;
+  }
+  if (column === 1) {
+    const input = document.createElement("input");
+    input.readOnly = !!def;
+    input.value = def?.label || row[1] || "";
+    return input;
+  }
+  if (column !== 2 || !def?.options) return null;
+  const select = document.createElement("select");
+  select.add(new Option("Select value…", ""));
+  for (const [value, label] of Object.entries(def.options)) select.add(new Option(label + " (" + value + ")", value));
+  if (row[2] != null && String(row[2]) !== "" && !Object.hasOwn(def.options, String(row[2]))) {
+    select.add(new Option("Current unsupported value: " + row[2], String(row[2])));
+  }
+  return select;
+}
+
+function validateSettingsEdit(mode, index, updated) {
+  if (mode !== "settings") return null;
+  const key = String(updated[0] || "");
+  const def = SETTINGS_DICTIONARY[key];
+  if (!def) return "Choose a documented setting.";
+  if (settingsDraftRows.some((row, i) => i !== index && row.key === key)) return "This setting already exists in the draft.";
+  const error = validateSettingValue(key, updated[2]);
+  return error ? def.label + ": " + error : null;
+}
+
 const editor = createModalEditor(els, {
+  makeField: settingsEditorField,
+  validateRow: validateSettingsEdit,
   getRow: (mode, idx) => {
     if (mode === "taglist") {
       const r = tagDraftRows[idx] || {};
@@ -206,7 +249,7 @@ const editor = createModalEditor(els, {
       settingsDraftRows[idx] = {
         ...prev,
         key: updated[0] ?? "",
-        label: updated[1] ?? "",
+        label: SETTINGS_DICTIONARY[updated[0]]?.label || updated[1] || "",
         value: updated[2] ?? "",
       };
       return;
@@ -427,6 +470,7 @@ function rerenderAlerts() {
 }
 
 function rerenderSettings() {
+  settingsProfiles?.updateButtons();
   const isConn = !!transport?.isConnected;
   const busy = !!sessionBusy;
 
@@ -480,7 +524,8 @@ function rerenderSettings() {
     tdLabel.textContent = r.label ?? "";
 
     const tdValue = document.createElement("td");
-    tdValue.textContent = r.value ?? "";
+    const def = SETTINGS_DICTIONARY[r.key];
+    tdValue.textContent = def?.sensitive ? "(device-specific)" : def ? `${describeSettingValue(r.key, r.value)} (${r.value ?? ""})` : (r.value ?? "");
     tdValue.className = "mono";
 
     const tdAct = document.createElement("td");
@@ -541,6 +586,7 @@ async function connect() {
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
     alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
     settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
+  settingsProfiles?.clearPreview();
 
     rerenderTasks();
     rerenderTaskDefinition();
@@ -619,6 +665,7 @@ async function cleanup() {
   tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
   alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
   settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
+  settingsProfiles?.clearPreview();
 
   rerenderTasks();
   rerenderTaskDefinition();
@@ -1166,6 +1213,16 @@ els.alertsFilter?.addEventListener("input", () => rerenderAlerts());
 // -----------------------
 // Settings
 // -----------------------
+const settingsProfiles = setupSettingsProfiles({
+  getSession: () => session,
+  getTransport: () => transport,
+  isBusy: () => sessionBusy,
+  onSnapshot: async () => {
+    settingsDeviceRows = await fetchSettings(session, SETTINGS_DEFAULT_DEFS);
+    rerenderSettings();
+  }
+});
+
 els.syncSettingsBtn.addEventListener("click", async () => {
   try {
     if (!transport?.isConnected || !session) return;
@@ -1235,12 +1292,14 @@ els.uploadSettingsBtn.addEventListener("click", async () => {
     els.uploadSettingsBtn.disabled = true;
 
     await applySettings(session, settingsDraftRows, {
+      verify: true,
       onProgress: ({ i, total, row }) => {
-        els.settingsMeta.textContent = `Uploading… ${i}/${total} (${row.key || "?"})`;
+        els.settingsMeta.textContent = `Uploading and verifying… ${i}/${total} (${row.key || "?"})`;
       }
     });
 
-    els.settingsMeta.textContent = "Upload complete. Tip: Sync Device to confirm.";
+    settingsDeviceRows = await fetchSettings(session, SETTINGS_DEFAULT_DEFS);
+    els.settingsMeta.textContent = "Settings written and verified.";
   } catch (e) {
     alert(`Failed to upload settings: ${e?.message || e}`);
   } finally {

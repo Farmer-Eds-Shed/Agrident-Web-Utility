@@ -268,6 +268,33 @@
     <!-- Settings panel -->
     <section id="panelSettings" class="panelCard" style="display:none;">
       <div class="card">
+        <h3>Quick Setup — Reader Configurations</h3>
+        <p class="muted">Choose a configuration and compare it with your reader before applying. For HerdApp Bluetooth, use Slave mode and BLE profile. If Bluetooth cannot connect, set these on the reader or use USB Serial.</p>
+        <div class="toolbar">
+          <div class="toolbarControls toolbarControlsWide">
+            <div class="fieldInline">
+              <label for="settingsProfileSelect">Configuration</label>
+              <select id="settingsProfileSelect" disabled><option value="">Loading configurations…</option></select>
+            </div>
+          </div>
+          <div class="toolbarPrimary">
+            <button class="btn" id="refreshSettingsProfilesBtn" type="button">Refresh Profiles</button>
+            <button class="btn" id="previewSettingsProfileBtn" type="button" disabled>Compare with Reader</button>
+            <button class="btn btnPrimary" id="applySettingsProfileBtn" type="button" disabled>Apply Changes</button>
+          </div>
+        </div>
+        <p class="muted" id="settingsProfileStatus" aria-live="polite">Choose a profile to begin.</p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Setting</th><th>Current</th><th>Profile</th><th>Action</th></tr></thead>
+            <tbody id="settingsProfileDiff"></tbody>
+          </table>
+        </div>
+        <p class="muted">Bluetooth Mode, Profile and Baud Rate changes require USB Serial. Only differences are written and verified. Other settings are preserved.</p>
+      </div>
+      <details class="card" id="advancedSettings">
+        <summary><strong>Advanced — Individual Reader Settings</strong></summary>
+      <div class="card">
         <div class="toolbar">
           <div class="toolbarPrimary">
             <button class="btn btnPrimary" id="syncSettingsBtn" disabled>Sync Device</button>
@@ -304,6 +331,7 @@
 
         <div class="muted mt8" id="settingsInfo"></div>
       </div>
+      </details>
     </section>
 
   </main>
