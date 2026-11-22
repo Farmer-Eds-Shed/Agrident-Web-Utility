@@ -817,7 +817,7 @@ els.syncTasksBtn.addEventListener("click", async () => {
 els.initialiseAllTasksBtn.addEventListener("click", async () => {
   if (!transport?.isConnected || !session || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading) return;
   const confirmation = prompt(
-    "DANGER: Initialise ALL tasks on the reader. This may remove every task definition and potentially recorded task data. This cannot be undone.\n\nType DELETE ALL TASKS to proceed:"
+    "DANGER: Initialise ALL tasks on the reader. This PERMANENTLY DELETES ALL task definitions AND ALL recorded task data. This cannot be undone.\n\nType DELETE ALL TASKS to proceed:"
   );
   if (confirmation !== "DELETE ALL TASKS") return;
   if (!confirm("Final confirmation: send [CIB|1000|9] to initialise ALL tasks?")) return;
@@ -846,7 +846,7 @@ els.initialiseAllTasksBtn.addEventListener("click", async () => {
     }
   } catch (e) {
     taskCatalogueLoaded = false;
-    alert(`Initialisation not confirmed: ${e?.message || e}. The reader may still have processed the command; run Get Tasks to inspect its state.`);
+    alert(`Initialisation not confirmed: ${e?.message || e}. The reader may still have erased all task definitions and recorded data; run Get Tasks to inspect its state.`);
   } finally {
     taskDefinitionUploading = false;
     rerenderTaskDefinition();
