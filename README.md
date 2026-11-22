@@ -22,12 +22,8 @@ while the logic gradually moves out of `app.js` into modules.
 ## Upload task definitions (.tsk)
 Connect to the reader using BLE or USB Serial, open **Tasks**, and choose a
 `.tsk` command file. Review its frames before clicking **Upload Definition → Wand**.
-The upload transmits each bracketed command in file order, with pacing between
-frames. It does **not** erase tasks automatically; any erase/reset commands
+The upload sends each bracketed command in file order and waits for the\nreader's matching command-specific OK acknowledgement before continuing. It does **not** erase tasks automatically; any erase/reset commands
 included in the file are sent as written and flagged in the confirmation.
 
-**Important:** “All commands transmitted” means the browser completed its
-writes, **not** that the reader accepted or saved the task definition. Click
-**Get Tasks** afterward and confirm the new task exists. Test on a spare reader
-before using production task configurations. The uploader intentionally does
-not assume undocumented per-command acknowledgements.
+**Important:** Each command must receive its matching OK acknowledgement.\nThis still does not prove that the task is persisted. Click **Get Tasks** afterward\nand confirm the new task exists. Test on a spare reader
+before using production task configurations. The acknowledgement mapping is based on an AWR250 V2.15 serial capture.
