@@ -26,6 +26,7 @@ import { fetchTasks, fetchTaskHeaders, fetchTaskRows, fetchTaskRowsVerified } fr
 import { fetchGroups, fetchGroupRows } from "./wand/commands/groups.js";
 
 import { parseCSV } from "./parsers/csv_import.js";
+import { readTextFile, parseTskCommands, uploadTskCommands, getTskSlot, setTskSlot } from "./configs/tsk.js";
 
 import { fetchTaglist, eraseTaglist, uploadTaglist } from "./wand/commands/taglist.js";
 import { fetchAlerts, eraseAlerts, uploadAlerts } from "./wand/commands/alerts.js";
@@ -81,6 +82,44 @@ let settingsDraftSource = "none"; // "device" | "json" | "none"
 let settingsInfo = null;       // bt/mac versions etc
 
 let sessionBusy = false;
+let taskDefinitionCommands = [];
+let taskDefinitionName = "";
+let taskDefinitionUploading = false;
+let taskCatalogueLoaded = false;
+let repositoryTaskTemplates = [];
+
+function refreshTaskSlotOptions() {
+  const selected = els.taskDefinitionSlot.value;
+  const occupied = new Map(tasks.map(t => [Number(t.idx), t]));
+  els.taskDefinitionSlot.replaceChildren();
+  for (let slot = 1; slot <= 20; slot++) {
+    const task = occupied.get(slot - 1);
+    els.taskDefinitionSlot.add(new Option(task
+      ? `Task ${slot} — ${task.name} (occupied)`
+      : `Task ${slot} — Empty`, String(slot)));
+  }
+  if (selected) els.taskDefinitionSlot.value = selected;
+}
+refreshTaskSlotOptions();
+
+
+function rerenderTaskDefinition() {
+  const connected = !!transport?.isConnected;
+  els.openTaskUploadBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading;
+  els.initialiseAllTasksBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading;
+  els.taskDefinitionFile.disabled = !connected || sessionBusy || taskDefinitionUploading;
+  els.taskTemplateSelect.disabled = !connected || sessionBusy || taskDefinitionUploading;
+  els.refreshTaskTemplatesBtn.disabled = sessionBusy || taskDefinitionUploading;
+  els.taskDefinitionSlot.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
+  els.uploadTaskDefinitionBtn.disabled = !connected || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading || !taskDefinitionCommands.length;
+  const slot = Number(els.taskDefinitionSlot.value);
+  els.taskDefinitionPreview.textContent = taskDefinitionCommands.length
+    ? setTskSlot(taskDefinitionCommands, slot).join("\n") : "";
+  els.taskDefinitionMeta.textContent = taskDefinitionCommands.length
+    ? `${taskDefinitionName} — ${taskDefinitionCommands.length} commands loaded. Review before uploading.`
+    : "No task definition loaded.";
+}
+
 
 // -----------------------
 // Transport + Session
@@ -104,6 +143,8 @@ function buildSession() {
       els.taskSelect.disabled = busy || !(transport?.isConnected && tasks.length);
       els.syncTasksBtn.disabled = busy || !(transport?.isConnected);
       els.downloadCsvBtn.disabled = busy || !(transport?.isConnected && taskRows.length);
+
+      rerenderTaskDefinition();
 
       // groups
       els.groupSelect.disabled = busy || !(transport?.isConnected && groups.length);
@@ -494,12 +535,15 @@ async function connect() {
 
     // reset state
     tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+    taskDefinitionCommands = []; taskDefinitionName = "";
+    taskCatalogueLoaded = false;
     groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
     tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
     alertDeviceRows = []; alertDraftRows = []; alertDraftSource = "none";
     settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
 
     rerenderTasks();
+    rerenderTaskDefinition();
     rerenderGroups();
     rerenderTaglist();
     rerenderAlerts();
@@ -568,6 +612,8 @@ async function cleanup() {
   els.groupsSyncedAtEl.textContent = "";
 
   tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+  taskDefinitionCommands = []; taskDefinitionName = "";
+  taskCatalogueLoaded = false;
   groups = []; selectedGroup = null; groupHeaders = []; groupRows = [];
 
   tagDeviceRows = []; tagDraftRows = []; tagDraftSource = "none";
@@ -575,6 +621,7 @@ async function cleanup() {
   settingsDeviceRows = []; settingsDraftRows = []; settingsDraftSource = "none"; settingsInfo = null;
 
   rerenderTasks();
+  rerenderTaskDefinition();
   rerenderGroups();
   rerenderTaglist();
   rerenderAlerts();
@@ -607,6 +654,145 @@ els.preferGroupXEl?.addEventListener("change", () => {
   preferGroupX = !!els.preferGroupXEl.checked;
 });
 
+// The Tasks panel stays compact; upload configuration lives in a separate dialog.
+function setTaskUploadOpen(open) {
+  if (taskDefinitionUploading && !open) return;
+  els.taskUploadOverlay.classList.toggle("show", open);
+  els.taskUploadOverlay.setAttribute("aria-hidden", String(!open));
+  if (open) {
+    rerenderTaskDefinition();
+    if (!repositoryTaskTemplates.length) refreshRepositoryTaskTemplates();
+    els.taskTemplateSelect.focus();
+  } else {
+    els.openTaskUploadBtn.focus();
+  }
+}
+
+els.openTaskUploadBtn.addEventListener("click", () => setTaskUploadOpen(true));
+els.closeTaskUploadBtn.addEventListener("click", () => setTaskUploadOpen(false));
+els.cancelTaskUploadBtn.addEventListener("click", () => setTaskUploadOpen(false));
+els.taskUploadOverlay.addEventListener("click", (event) => {
+  if (event.target === els.taskUploadOverlay) setTaskUploadOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && els.taskUploadOverlay.classList.contains("show")) {
+    event.preventDefault();
+    setTaskUploadOpen(false);
+  }
+});
+
+// Repository templates are served as static assets alongside this web utility.
+// A manifest avoids relying on GitHub API calls, credentials, or directory listing.
+async function refreshRepositoryTaskTemplates() {
+  els.taskTemplateStatus.textContent = "Loading repository templates…";
+  els.refreshTaskTemplatesBtn.disabled = true;
+  try {
+    const response = await fetch("./task-definitions/manifest.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const manifest = await response.json();
+    if (!Array.isArray(manifest.templates)) throw new Error("Invalid task template manifest.");
+    repositoryTaskTemplates = manifest.templates.filter(t =>
+      typeof t.name === "string" && typeof t.file === "string" &&
+      /^[a-zA-Z0-9_-]+\.tsk$/.test(t.file));
+    els.taskTemplateSelect.replaceChildren(new Option("Choose a repository template…", ""));
+    for (const template of repositoryTaskTemplates) {
+      els.taskTemplateSelect.add(new Option(template.name, template.file));
+    }
+    els.taskTemplateStatus.textContent = repositoryTaskTemplates.length
+      ? `${repositoryTaskTemplates.length} repository template(s) available. Or choose a local file.`
+      : "No repository templates listed yet. You can still choose a local file.";
+  } catch (e) {
+    els.taskTemplateStatus.textContent = `Repository templates unavailable: ${e.message}. Local files still work.`;
+  } finally {
+    els.refreshTaskTemplatesBtn.disabled = sessionBusy || taskDefinitionUploading;
+  }
+}
+els.refreshTaskTemplatesBtn.addEventListener("click", refreshRepositoryTaskTemplates);
+els.taskTemplateSelect.addEventListener("change", async () => {
+  const file = els.taskTemplateSelect.value;
+  if (!file) return;
+  taskDefinitionCommands = [];
+  taskDefinitionName = "";
+  rerenderTaskDefinition();
+  try {
+    if (!/^[a-zA-Z0-9_-]+\.tsk$/.test(file) || !repositoryTaskTemplates.some(t => t.file === file)) {
+      throw new Error("Invalid repository template selection.");
+    }
+    const response = await fetch(`./task-definitions/${file}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    if (text.length > 1024 * 1024) throw new Error("Task definition exceeds 1 MB.");
+    const commands = parseTskCommands(text);
+    const originalSlot = getTskSlot(commands);
+    taskDefinitionCommands = commands;
+    taskDefinitionName = repositoryTaskTemplates.find(t => t.file === file).name;
+    els.taskDefinitionSlot.value = String(originalSlot);
+    els.taskDefinitionFile.value = "";
+  } catch (e) {
+    alert(`Cannot load repository template: ${e.message}`);
+    els.taskTemplateSelect.value = "";
+  }
+  rerenderTaskDefinition();
+});
+
+// Task definition files are command streams, not exported task data.
+els.taskDefinitionFile.addEventListener("change", async () => {
+  taskDefinitionCommands = [];
+  taskDefinitionName = "";
+  els.taskTemplateSelect.value = "";
+  const file = els.taskDefinitionFile.files?.[0];
+  if (!file) { rerenderTaskDefinition(); return; }
+  try {
+    if (file.size > 1024 * 1024) throw new Error("Task definition exceeds 1 MB");
+    const commands = parseTskCommands(await readTextFile(file));
+    const originalSlot = getTskSlot(commands);
+    taskDefinitionCommands = commands;
+    taskDefinitionName = file.name;
+    els.taskDefinitionSlot.value = String(originalSlot);
+  } catch (e) {
+    alert(`Cannot load task definition: ${e?.message || e}`);
+    els.taskDefinitionFile.value = "";
+  }
+  rerenderTaskDefinition();
+});
+
+els.taskDefinitionSlot.addEventListener("change", rerenderTaskDefinition);
+
+els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
+  if (!transport?.isConnected || !session || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading) return;
+  if (!taskDefinitionCommands.length) return;
+  const destinationSlot = Number(els.taskDefinitionSlot.value);
+  const commands = setTskSlot(taskDefinitionCommands, destinationSlot);
+  const risks = commands.filter((c) => /^\[(?:XE|RESET|FORMAT)/i.test(c));
+  const warning = risks.length
+    ? `WARNING: ${risks.length} command(s) appear destructive (erase/reset/format). Review the preview carefully.\n\n`
+    : "";
+  const occupied = tasks.find(t => Number(t.idx) === destinationSlot - 1);
+  const overwriteWarning = occupied ? `\n\nTask ${destinationSlot} is OCCUPIED by "${occupied.name}" and may be replaced.` : "";
+  if (!confirm(`${warning}Upload "${taskDefinitionName}" to Task ${destinationSlot} (wand menu)?\n\nThis may REPLACE the existing definition in Task ${destinationSlot}. The upload cannot be rolled back automatically.${overwriteWarning}`)) return;
+
+  taskDefinitionUploading = true;
+  rerenderTaskDefinition();
+  try {
+    await uploadTskCommands(session, commands, {
+      onProgress: ({ i, total }) => {
+        els.taskDefinitionMeta.textContent = `Uploading task definition… ${i}/${total} commands acknowledged`;
+      }
+    });
+    tasks = await fetchTasks(session);
+    taskCatalogueLoaded = true;
+    refreshTaskSlotOptions();
+    els.syncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
+    rerenderTasks();
+    alert(`All task commands acknowledged. Task list refreshed; verify Task ${destinationSlot} appears in the wand menu.`);
+  } catch (e) {
+    alert(`Task definition upload stopped: ${e?.message || e}. The wand may have applied the commands already transmitted.`);
+  } finally {
+    taskDefinitionUploading = false;
+    rerenderTaskDefinition();
+  }
+});
+
 // Sync Tasks
 els.syncTasksBtn.addEventListener("click", async () => {
   try {
@@ -614,6 +800,8 @@ els.syncTasksBtn.addEventListener("click", async () => {
     els.syncTasksBtn.disabled = true;
 
     tasks = await fetchTasks(session);
+    taskCatalogueLoaded = true;
+    refreshTaskSlotOptions();
     els.syncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
 
     rerenderTasks();
@@ -621,6 +809,48 @@ els.syncTasksBtn.addEventListener("click", async () => {
     alert(`Failed to sync tasks: ${e?.message || e}`);
   } finally {
     els.syncTasksBtn.disabled = !(transport?.isConnected);
+    rerenderTaskDefinition();
+  }
+});
+
+// TaskTool AWR250 V2.15 capture: [CIB|1000|9] -> echo -> [CIBOK].
+// This permanently erases all task definitions and all recorded task data.
+els.initialiseAllTasksBtn.addEventListener("click", async () => {
+  if (!transport?.isConnected || !session || !taskCatalogueLoaded || sessionBusy || taskDefinitionUploading) return;
+  const confirmation = prompt(
+    "DANGER: Initialise ALL tasks on the reader. This PERMANENTLY DELETES ALL task definitions AND ALL recorded task data. This cannot be undone.\n\nType DELETE ALL TASKS to proceed:"
+  );
+  if (confirmation !== "DELETE ALL TASKS") return;
+  if (!confirm("Final confirmation: send [CIB|1000|9] to initialise ALL tasks?")) return;
+
+  taskDefinitionUploading = true;
+  rerenderTaskDefinition();
+  try {
+    await session.send("[CIB|1000|9]", {
+      name: "Initialise all tasks",
+      okToken: "CIBOK",
+    });
+    // Never continue using the old catalogue after a destructive command.
+    taskCatalogueLoaded = false;
+    tasks = []; selectedTask = null; taskHeaders = []; taskRows = [];
+    refreshTaskSlotOptions();
+    rerenderTasks();
+    try {
+      tasks = await fetchTasks(session);
+      taskCatalogueLoaded = true;
+      refreshTaskSlotOptions();
+      els.syncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
+      rerenderTasks();
+      alert("Initialisation acknowledged. Task list refreshed; verify the reader's task slots.");
+    } catch (refreshError) {
+      alert(`Initialisation acknowledged, but Get Tasks failed: ${refreshError.message}. Run Get Tasks before uploading.`);
+    }
+  } catch (e) {
+    taskCatalogueLoaded = false;
+    alert(`Initialisation not confirmed: ${e?.message || e}. The reader may still have erased all task definitions and recorded data; run Get Tasks to inspect its state.`);
+  } finally {
+    taskDefinitionUploading = false;
+    rerenderTaskDefinition();
   }
 });
 

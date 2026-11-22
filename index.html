@@ -104,6 +104,8 @@
         </div>
       </div>
 
+
+
       <div class="panelHeader">
         <h3 class="mb6">Preview</h3>
         <div class="muted" id="groupPreviewMeta">No group selected.</div>
@@ -125,6 +127,7 @@
         <div class="toolbarPrimary">
           <button class="btn btnPrimary" id="syncTasksBtn" disabled>Get Tasks</button>
           <button class="btn" id="downloadCsvBtn" disabled>Download CSV</button>
+          <button class="btn" id="openTaskUploadBtn" disabled>Upload Task Definition…</button>
         </div>
 
         <div class="toolbarControls">
@@ -141,6 +144,14 @@
           </div>
         </div>
       </div>
+
+      <details class="connMore" style="margin:12px 0;">
+        <summary>Advanced task maintenance</summary>
+        <div style="padding:12px 0;">
+          <p class="muted">Permanently deletes ALL task definitions AND ALL recorded task data on the connected reader. This cannot be undone.</p>
+          <button class="btn btnDanger" id="initialiseAllTasksBtn" type="button" disabled>Initialise All Tasks…</button>
+        </div>
+      </details>
 
       <div class="panelHeader">
         <h3 class="mb6">Preview</h3>
@@ -296,6 +307,43 @@
     </section>
 
   </main>
+
+  <!-- Task definition upload dialog -->
+  <div id="taskUploadOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="taskUploadTitle" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHeader">
+        <div class="modalTitle" id="taskUploadTitle">Upload Task Definition</div>
+        <span class="modalHeaderSpacer"></span>
+        <button class="btn btnSmall" id="closeTaskUploadBtn" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="modalBody">
+        <div class="fieldInline">
+          <label for="taskTemplateSelect">Repository template</label>
+          <select id="taskTemplateSelect"><option value="">Choose a repository template…</option></select>
+          <button class="btn btnSmall" id="refreshTaskTemplatesBtn" type="button">Refresh</button>
+        </div>
+        <div class="muted" id="taskTemplateStatus" aria-live="polite">Or choose a local file below.</div>
+        <div class="fieldInline" style="margin-top:12px;">
+          <label for="taskDefinitionFile">Local task definition (.tsk)</label>
+          <input id="taskDefinitionFile" type="file" accept=".tsk,.txt,text/plain">
+        </div>
+        <div class="fieldInline" style="margin-top:12px;">
+          <label for="taskDefinitionSlot">Destination slot (wand menu)</label>
+          <select id="taskDefinitionSlot" disabled></select>
+        </div>
+        <div class="muted" style="margin-top:12px;" id="taskDefinitionMeta" aria-live="polite">No task definition loaded.</div>
+        <div class="muted" style="margin-top:6px;">The selected slot may be replaced. The original file is not changed.</div>
+        <details style="margin-top:12px;">
+          <summary>Preview commands to be sent</summary>
+          <pre id="taskDefinitionPreview" class="scroll" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px"></pre>
+        </details>
+      </div>
+      <div class="modalFooter">
+        <button class="btn" id="cancelTaskUploadBtn" type="button">Cancel</button>
+        <button class="btn btnPrimary" id="uploadTaskDefinitionBtn" type="button" disabled>Upload to Wand</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal editor -->
   <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-hidden="true">

@@ -25,6 +25,7 @@ export function createWandSession({
   // A lightweight “frame watcher” used by taglist/alerts uploads where
   // there is no OK token, only an echoed frame.
   let watcher = null; // { predicate, resolve, reject, timer, name }
+  let batchBusy = false;
 
   const writeQueue = [];
   let writing = false;
@@ -123,6 +124,7 @@ export function createWandSession({
   }
 
   function beginCommand(name, okToken, timeoutOverrideMs, absoluteOverrideMs) {
+    if (batchBusy) throw new Error("Busy uploading frames");
     if (currentCommand) throw new Error(`Busy running ${currentCommand.name}`);
     if (watcher) throw new Error(`Busy waiting for ${watcher.name}`);
 
@@ -165,6 +167,7 @@ export function createWandSession({
   }
 
   function beginWatcher(name, predicate, timeoutOverrideMs) {
+    if (batchBusy) throw new Error("Busy uploading frames");
     if (currentCommand) throw new Error(`Busy running ${currentCommand.name}`);
     if (watcher) throw new Error(`Busy waiting for ${watcher.name}`);
 
@@ -217,9 +220,11 @@ export function createWandSession({
     if (isOkFrame(f, currentCommand.okToken)) finishCommand(true);
   }
 
-  async function enqueueWrite(str) {
-    writeQueue.push(str);
-    pumpWrites();
+  function enqueueWrite(str) {
+    return new Promise((resolve, reject) => {
+      writeQueue.push({ str, resolve, reject });
+      void pumpWrites();
+    });
   }
 
   async function pumpWrites() {
@@ -227,15 +232,19 @@ export function createWandSession({
     writing = true;
     try {
       while (writeQueue.length) {
-        const s = writeQueue.shift();
-        await transport.write(s);
-        // small pacing helps BLE
-        await sleep(10);
+        const item = writeQueue.shift();
+        try {
+          await transport.write(item.str);
+          await sleep(10);
+          item.resolve();
+        } catch (e) {
+          item.reject(e);
+          while (writeQueue.length) writeQueue.shift().reject(e);
+          if (currentCommand) finishCommand(false, e);
+          if (watcher) finishWatcher(false, null, e);
+          break;
+        }
       }
-    } catch (e) {
-      if (currentCommand) finishCommand(false, e);
-      if (watcher) finishWatcher(false, null, e);
-      throw e;
     } finally {
       writing = false;
     }
@@ -253,6 +262,7 @@ export function createWandSession({
 
   // Structured send: waits for okToken if provided
   async function send(cmd, structured = null) {
+    if (batchBusy) throw new Error("Busy uploading frames");
     if (!transport.isConnected) throw new Error("Not connected");
 
     const out = normalizeFrameOrCmd(cmd);
@@ -270,10 +280,35 @@ export function createWandSession({
 
   // Raw frame send (no waiting)
   async function sendFrame(frame, opts = {}) {
+    if (batchBusy) throw new Error("Busy uploading frames");
     if (!transport.isConnected) throw new Error("Not connected");
     const out = normalizeFrameOrCmd(frame);
     if (!out) return;
     await enqueueWrite(out);
+  }
+
+  // A raw command stream has no documented per-frame OK; progress means written.
+  async function sendFrames(frames, { name = "Send command file", delayMs = 100, onProgress } = {}) {
+    if (!transport.isConnected) throw new Error("Not connected");
+    if (batchBusy || currentCommand || watcher) throw new Error("Reader is busy");
+    if (!Array.isArray(frames) || !frames.length) throw new Error("No frames to send");
+    batchBusy = true;
+    setBusy?.(name);
+    onCommandUIStateChange?.(true);
+    try {
+      for (let i = 0; i < frames.length; i++) {
+        if (!transport.isConnected) throw new Error("Reader disconnected during upload");
+        const frame = normalizeFrameOrCmd(frames[i]);
+        if (!frame) throw new Error(`Empty frame at position ${i + 1}`);
+        await enqueueWrite(frame);
+        onProgress?.({ i: i + 1, total: frames.length, command: frame });
+        if (i < frames.length - 1 && delayMs > 0) await sleep(delayMs);
+      }
+    } finally {
+      batchBusy = false;
+      setBusy?.("idle");
+      onCommandUIStateChange?.(false);
+    }
   }
 
   // Wait for a frame that matches predicate (used by tag uploads, etc.)
@@ -299,6 +334,7 @@ export function createWandSession({
     onTextChunk,
     send,
     sendFrame,
+    sendFrames,
     waitForFrame,
     sendFrameAndWait,
     resetRx,
