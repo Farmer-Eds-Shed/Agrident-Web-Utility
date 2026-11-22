@@ -308,7 +308,13 @@
       </div>
       <div class="modalBody">
         <div class="fieldInline">
-          <label for="taskDefinitionFile">Task definition (.tsk)</label>
+          <label for="taskTemplateSelect">Repository template</label>
+          <select id="taskTemplateSelect"><option value="">Choose a repository template…</option></select>
+          <button class="btn btnSmall" id="refreshTaskTemplatesBtn" type="button">Refresh</button>
+        </div>
+        <div class="muted" id="taskTemplateStatus" aria-live="polite">Or choose a local file below.</div>
+        <div class="fieldInline" style="margin-top:12px;">
+          <label for="taskDefinitionFile">Local task definition (.tsk)</label>
           <input id="taskDefinitionFile" type="file" accept=".tsk,.txt,text/plain">
         </div>
         <div class="fieldInline" style="margin-top:12px;">
