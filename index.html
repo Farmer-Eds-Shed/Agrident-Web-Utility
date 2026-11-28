@@ -4,14 +4,17 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Agrident Web Utility</title>
+  <title>AWR Web Utility</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 
 <body>
   <header class="appHeader">
     <div class="appTitleWrap">
-      <h1 class="appTitle">Agrident Web Utility</h1>
+      <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px;">
+        <h1 class="appTitle">AWR Web Utility</h1>
+        <span id="testEnvironmentLabel" class="pill" hidden style="background:#FFF4D6; color:#754C00; border-color:#D6B66C;">Test Environment</span>
+      </div>
       <div class="muted appSubtitle">Agrident/Allflex Data Downloader</div>
     </div>
   </header>
@@ -337,7 +340,7 @@
   </main>
 
   <footer class="muted" style="text-align:center; margin:16px 0; padding:12px 0; border-top:1px solid var(--bd);">
-    Powered by <a href="https://farmdash.ie" target="_blank" rel="noopener noreferrer" style="color:var(--ok-fg); font-weight:600;">farmdash.ie</a>
+    Powered by <a href="https://farmdash.ie" target="_blank" rel="noopener noreferrer" style="color:var(--ok-fg); font-weight:600;">FarmDash.ie</a>
   </footer>
 
   <!-- Task definition upload dialog -->
@@ -451,6 +454,38 @@
         if (el) panelObs.observe(el, { attributes: true, attributeFilter: ["style","class"] });
       });
       updateActiveTabBtn();
+    })();
+  </script>
+
+  <!-- Migration notice: GitHub Pages only -->
+  <dialog id="migrationNotice" aria-labelledby="migrationTitle" style="width:min(420px, calc(100% - 32px)); border:1px solid var(--bd); border-radius:var(--radius); padding:24px; color:var(--text); background:var(--card); box-shadow:var(--shadow);">
+    <h2 id="migrationTitle" style="margin-top:0;">We've moved!</h2>
+    <p>The stable version of the AWR Web Utility is now available on FarmDash.ie.</p>
+    <p>This site is now used for testing and may contain experimental features.</p>
+    <p><a href="https://awr.farmdash.ie/" style="color:var(--ok-fg); font-weight:600;">awr.farmdash.ie</a></p>
+    <p>Please update your bookmarks to use the new address for future visits.</p>
+    <form method="dialog" style="display:flex; flex-wrap:wrap; gap:10px;">
+      <a class="btn btnPrimary" href="https://awr.farmdash.ie/" style="padding:10px 12px; text-decoration:none;">Open new website</a>
+      <button class="btn" type="submit">Continue to test version</button>
+    </form>
+  </dialog>
+  <style>
+    #migrationNotice::backdrop { background:rgba(36,55,70,.45); }
+  </style>
+  <script>
+    (function () {
+      if (location.hostname !== "farmer-eds-shed.github.io") return;
+      document.getElementById("testEnvironmentLabel").hidden = false;
+      const notice = document.getElementById("migrationNotice");
+      const key = "awr-farmdash-migration-dismissed";
+      try {
+        if (sessionStorage.getItem(key)) return;
+      } catch (_) {}
+      if (typeof notice.showModal !== "function") return;
+      notice.addEventListener("close", function () {
+        try { sessionStorage.setItem(key, "1"); } catch (_) {}
+      });
+      notice.showModal();
     })();
   </script>
 

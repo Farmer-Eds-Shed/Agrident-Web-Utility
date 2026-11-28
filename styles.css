@@ -1,28 +1,28 @@
-/* styles.css  (Allflex-ish blue theme + softer status colours) */
+/* styles.css — FarmDash theme */
 :root{
-  /* sampled from your guide image: bright Allflex blue + light blue */
-  --brand:#029EDF;
-  --brand2:#6FC4E8;
+  /* FarmDash shared palette */
+  --brand:#28794B;
+  --brand2:#A8D5B8;
 
-  --bg:#F5FAFD;
+  --bg:#F4F7F5;
   --card:#FFFFFF;
-  --text:#0B1B2B;
-  --muted:#516273;
+  --text:#243746;
+  --muted:#64748B;
 
-  --bd:rgba(11,27,43,.12);
-  --bd2:rgba(11,27,43,.08);
+  --bd:rgba(36,55,70,.12);
+  --bd2:rgba(36,55,70,.08);
 
-  --shadow:0 10px 24px rgba(11,27,43,.10);
+  --shadow:0 10px 24px rgba(36,55,70,.10);
 
   /* softer “status” colours (less shouty than green/red) */
-  --ok-bg:#E7F6FF;
-  --ok-fg:#0B4E6B;
+  --ok-bg:#E7F4EB;
+  --ok-fg:#205D39;
 
   --bad-bg:#FFF1F1;
   --bad-fg:#7A2D2D;
 
   --btn-bg:#FFFFFF;
-  --btn-bd:rgba(11,27,43,.18);
+  --btn-bd:rgba(36,55,70,.18);
 
   --danger-bg:#C95757;   /* softened red */
   --danger-bd:#B84A4A;
@@ -64,7 +64,7 @@ select, input{
   background:#fff;
   color:var(--text);
 }
-input::placeholder{ color:rgba(81,98,115,.75); }
+input::placeholder{ color:rgba(100,116,139,.75); }
 
 button:disabled{ opacity:.55; cursor:not-allowed; }
 
@@ -72,12 +72,12 @@ button:disabled{ opacity:.55; cursor:not-allowed; }
 .pill{
   padding:2px 10px;
   border-radius:999px;
-  background:rgba(11,27,43,.06);
+  background:rgba(36,55,70,.06);
   font-size:12px;
   white-space:nowrap;
   border:1px solid var(--bd2);
 }
-.ok{ background:var(--ok-bg); color:var(--ok-fg); border-color:rgba(2,158,223,.25); }
+.ok{ background:var(--ok-bg); color:var(--ok-fg); border-color:rgba(40,121,75,.25); }
 .bad{ background:var(--bad-bg); color:var(--bad-fg); border-color:rgba(201,87,87,.25); }
 
 /* Buttons */
@@ -89,14 +89,14 @@ button:disabled{ opacity:.55; cursor:not-allowed; }
 }
 
 .btnPrimary{
-  border-color: rgba(2,158,223,.55);
-  background: linear-gradient(180deg, var(--brand), #028CC7);
+  border-color: rgba(40,121,75,.55);
+  background: linear-gradient(180deg, var(--brand), #22683F);
   color:#fff;
 }
 
 .btnDanger{
   border-color: var(--danger-bd);
-  background: linear-gradient(180deg, var(--danger-bg), #B54646);
+  background: linear-gradient(180deg, #B54646, #A33D3D);
   color:#fff;
 }
 
@@ -189,10 +189,10 @@ details.connMore[open] > summary:after{ content:"▴"; }
 .tabBtn .tabLabel{ font-size:13px; }
 
 .tabBtn.active{
-  border-color: rgba(2,158,223,.55);
-  background: linear-gradient(180deg, rgba(2,158,223,.18), rgba(111,196,232,.10));
+  border-color: rgba(40,121,75,.55);
+  background: linear-gradient(180deg, rgba(40,121,75,.18), rgba(168,213,184,.10));
   color: var(--text);
-  box-shadow: 0 6px 16px rgba(2,158,223,.12);
+  box-shadow: 0 6px 16px rgba(40,121,75,.12);
 }
 
 /* ---------- Toolbars ---------- */
@@ -238,7 +238,7 @@ details.connMore[open] > summary:after{ content:"▴"; }
   padding: 8px 10px;
   border:1px solid var(--bd2);
   border-radius:12px;
-  background: rgba(2,158,223,.06);
+  background: rgba(40,121,75,.06);
 }
 
 /* Tables */
@@ -257,7 +257,7 @@ th, td{
 }
 
 th{
-  background: rgba(11,27,43,.03);
+  background: rgba(36,55,70,.03);
   position:sticky;
   top:0;
   z-index:1;
@@ -298,7 +298,7 @@ table {
 .overlay{
   position:fixed;
   inset:0;
-  background: rgba(11,27,43,.35);
+  background: rgba(36,55,70,.35);
   display:none;
   align-items:center;
   justify-content:center;
@@ -373,7 +373,7 @@ table {
   display:flex;
   gap:10px;
   justify-content:flex-end;
-  background: rgba(11,27,43,.03);
+  background: rgba(36,55,70,.03);
   flex-wrap:wrap;
 }
 
@@ -485,4 +485,10 @@ table {
 
   .scroll{ max-height:360px; }
   table{ min-width:680px; }
+}
+
+/* Accessible keyboard focus across shared controls */
+:where(button, select, input, a, summary):focus-visible{
+  outline:2px solid var(--brand);
+  outline-offset:3px;
 }
