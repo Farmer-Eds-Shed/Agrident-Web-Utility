@@ -492,3 +492,17 @@ table {
   outline:2px solid var(--brand);
   outline-offset:3px;
 }
+
+/* Missing browser APIs: show actionable guidance beside Connect. */
+.bleBrowserNotice {
+  margin-top:10px;
+  padding:10px 12px;
+  border:1px solid var(--bd);
+  border-radius:12px;
+  background:var(--bg);
+  font-size:13px;
+  line-height:1.45;
+}
+.bleBrowserNotice[hidden] { display:none; }
+.bleBrowserNotice p { margin:5px 0; }
+.bleBrowserNotice a { color:var(--ok-fg); font-weight:600; }
