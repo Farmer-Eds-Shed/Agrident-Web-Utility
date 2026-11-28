@@ -454,6 +454,36 @@
     })();
   </script>
 
+  <!-- Migration notice: GitHub Pages only -->
+  <dialog id="migrationNotice" aria-labelledby="migrationTitle" style="width:min(420px, calc(100% - 32px)); border:1px solid var(--bd); border-radius:var(--radius); padding:24px; color:var(--text); background:var(--card); box-shadow:var(--shadow);">
+    <h2 id="migrationTitle" style="margin-top:0;">We've moved!</h2>
+    <p>The AWR Web Utility has a new home on FarmDash.</p>
+    <p><a href="https://awr.farmdash.ie/" style="color:var(--ok-fg); font-weight:600;">awr.farmdash.ie</a></p>
+    <p>Please update your bookmarks to use the new address for future visits.</p>
+    <form method="dialog" style="display:flex; flex-wrap:wrap; gap:10px;">
+      <a class="btn btnPrimary" href="https://awr.farmdash.ie/" style="padding:10px 12px; text-decoration:none;">Open new website</a>
+      <button class="btn" type="submit">Continue here</button>
+    </form>
+  </dialog>
+  <style>
+    #migrationNotice::backdrop { background:rgba(36,55,70,.45); }
+  </style>
+  <script>
+    (function () {
+      if (location.hostname !== "farmer-eds-shed.github.io") return;
+      const notice = document.getElementById("migrationNotice");
+      const key = "awr-farmdash-migration-dismissed";
+      try {
+        if (sessionStorage.getItem(key)) return;
+      } catch (_) {}
+      if (typeof notice.showModal !== "function") return;
+      notice.addEventListener("close", function () {
+        try { sessionStorage.setItem(key, "1"); } catch (_) {}
+      });
+      notice.showModal();
+    })();
+  </script>
+
   <script type="module" src="./app.js"></script>
 </body>
 </html>
