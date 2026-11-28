@@ -570,6 +570,47 @@ function rerenderSettings() {
 }
 
 
+// Check API capability rather than rejecting all iOS browsers: Bluefy can
+// expose navigator.bluetooth on iPhone/iPad even when Safari cannot.
+function updateBleBrowserSupport() {
+  const hasBluetooth = typeof navigator.bluetooth?.requestDevice === "function";
+  const hasSerial = typeof navigator.serial?.requestPort === "function";
+  const isiOS = /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isBleSelected = isMobileUI() || els.connType.value === "ble";
+  const notice = document.getElementById("bleBrowserNotice");
+  const title = document.getElementById("bleBrowserNoticeTitle");
+  const message = document.getElementById("bleBrowserNoticeText");
+  const link = document.getElementById("bleBrowserNoticeLink");
+
+  // Keep the notification relevant to the selected connection type.
+  const unsupported = isBleSelected ? !hasBluetooth : !hasSerial;
+  notice.hidden = !unsupported;
+  link.hidden = !unsupported;
+  const recommendBluefy = isiOS && isBleSelected;
+  link.href = recommendBluefy
+    ? "https://apps.apple.com/ie/app/bluefy-web-ble-browser/id1492822055"
+    : "https://www.google.com/chrome/";
+  link.textContent = recommendBluefy
+    ? "Install Bluefy from the App Store"
+    : "Download Google Chrome";
+  if (isiOS && !isBleSelected) link.hidden = true;
+
+  if (unsupported) {
+    title.textContent = isBleSelected
+      ? "Bluetooth unavailable in this browser"
+      : "USB Serial unavailable in this browser";
+    message.textContent = isBleSelected
+      ? (isiOS
+        ? "Safari and most iPhone/iPad browsers cannot connect to BLE readers. Install Bluefy, then open this website inside Bluefy."
+        : "This browser does not provide the Web Bluetooth API. Open this website in Google Chrome over HTTPS.")
+      : "This browser does not provide Web Serial. Use Google Chrome on a supported desktop computer.";
+  }
+
+  // Only block unsupported connections, not the rest of the utility.
+  if (!transport?.isConnected) els.connectBtn.disabled = unsupported;
+}
+
 // -----------------------
 // Connect / Disconnect
 // -----------------------
@@ -676,6 +717,8 @@ async function cleanup() {
 
   setStatus(els, "Disconnected", false);
   setBusy(els, "idle");
+  enforceBLEOnMobile(els);
+  updateBleBrowserSupport();
 }
 
 
@@ -686,12 +729,18 @@ setConnDetailsDefault(els);
 window.addEventListener("resize", () => setConnDetailsDefault(els));
 
 enforceBLEOnMobile(els);
-window.addEventListener("resize", () => enforceBLEOnMobile(els));
+window.addEventListener("resize", () => {
+  enforceBLEOnMobile(els);
+  updateConnHint(els);
+  updateBleBrowserSupport();
+});
 
 updateConnHint(els);
+updateBleBrowserSupport();
 els.connType.addEventListener("change", () => {
   enforceBLEOnMobile(els);
   updateConnHint(els);
+  updateBleBrowserSupport();
 });
 
 els.connectBtn.addEventListener("click", connect);
