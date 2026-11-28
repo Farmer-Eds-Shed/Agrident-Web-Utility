@@ -506,3 +506,28 @@ table {
 .bleBrowserNotice[hidden] { display:none; }
 .bleBrowserNotice p { margin:5px 0; }
 .bleBrowserNotice a { color:var(--ok-fg); font-weight:600; }
+
+/* Inline transfer feedback, independent of individual reader commands. */
+.downloadStatus {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:10px 0;
+  color:var(--ok-fg);
+  font-size:13px;
+  font-weight:600;
+}
+.downloadStatus[hidden] { display:none; }
+.downloadSpinner {
+  width:16px;
+  height:16px;
+  flex:0 0 16px;
+  border:2px solid var(--brand2);
+  border-top-color:var(--brand);
+  border-radius:50%;
+  animation:downloadSpin .8s linear infinite;
+}
+@keyframes downloadSpin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .downloadSpinner { animation:none; }
+}

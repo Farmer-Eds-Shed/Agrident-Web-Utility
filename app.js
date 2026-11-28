@@ -683,6 +683,7 @@ async function connect() {
 }
 
 async function cleanup() {
+  clearDownloadIndicators();
   editor.closeEditor(false);
 
   try { await transport?.disconnect?.(); } catch {}
@@ -889,11 +890,32 @@ els.uploadTaskDefinitionBtn.addEventListener("click", async () => {
   }
 });
 
+// Download indicators span the entire operation, not individual protocol commands.
+const downloadIndicators = new Map();
+function beginDownload(panel, message) {
+  const token = Symbol(panel);
+  downloadIndicators.set(panel, token);
+  const el = document.getElementById(panel + "DownloadStatus");
+  el.querySelector(".downloadMessage").textContent = message;
+  el.hidden = false;
+  return token;
+}
+function endDownload(panel, token) {
+  if (downloadIndicators.get(panel) !== token) return;
+  downloadIndicators.delete(panel);
+  document.getElementById(panel + "DownloadStatus").hidden = true;
+}
+function clearDownloadIndicators() {
+  for (const [panel, token] of downloadIndicators) endDownload(panel, token);
+}
+
 // Sync Tasks
 els.syncTasksBtn.addEventListener("click", async () => {
+  let downloadToken;
   try {
     if (!transport?.isConnected || !session) return;
     els.syncTasksBtn.disabled = true;
+    downloadToken = beginDownload("task", "Retrieving task list…");
 
     tasks = await fetchTasks(session);
     taskCatalogueLoaded = true;
@@ -904,6 +926,7 @@ els.syncTasksBtn.addEventListener("click", async () => {
   } catch (e) {
     alert(`Failed to sync tasks: ${e?.message || e}`);
   } finally {
+    endDownload("task", downloadToken);
     els.syncTasksBtn.disabled = !(transport?.isConnected);
     rerenderTaskDefinition();
   }
@@ -952,11 +975,13 @@ els.initialiseAllTasksBtn.addEventListener("click", async () => {
 
 // Select Task
 els.taskSelect.addEventListener("change", async () => {
+  let downloadToken;
   if (taskFilterEl) taskFilterEl.value = "";
   try {
     if (!transport?.isConnected || !session) return;
     const idx = els.taskSelect.value;
     if (!idx) return;
+    downloadToken = beginDownload("task", "Downloading task records…");
 
     selectedTask = tasks.find((t) => String(t.idx) === String(idx)) || { idx, name: "(unknown)" };
     taskHeaders = [];
@@ -975,14 +1000,18 @@ els.taskSelect.addEventListener("change", async () => {
     rerenderTasks();
   } catch (e) {
     alert(`Failed to load task: ${e?.message || e}`);
+  } finally {
+    endDownload("task", downloadToken);
   }
 });
 
 // Sync Groups
 els.syncGroupsBtn.addEventListener("click", async () => {
+  let downloadToken;
   try {
     if (!transport?.isConnected || !session) return;
     els.syncGroupsBtn.disabled = true;
+    downloadToken = beginDownload("group", "Retrieving group list…");
 
     groups = await fetchGroups(session);
     els.groupsSyncedAtEl.textContent = `Synced: ${new Date().toLocaleString()}`;
@@ -991,17 +1020,20 @@ els.syncGroupsBtn.addEventListener("click", async () => {
   } catch (e) {
     alert(`Failed to sync groups: ${e?.message || e}`);
   } finally {
+    endDownload("group", downloadToken);
     els.syncGroupsBtn.disabled = !(transport?.isConnected);
   }
 });
 
 // Select Group
 els.groupSelect.addEventListener("change", async () => {
+  let downloadToken;
   if (groupFilterEl) groupFilterEl.value = "";
   try {
     if (!transport?.isConnected || !session) return;
     const id = els.groupSelect.value;
     if (!id) return;
+    downloadToken = beginDownload("group", "Downloading group records…");
 
     selectedGroup = groups.find((g) => String(g.id) === String(id)) || { id, name: "(unknown)" };
     groupHeaders = [];
@@ -1018,6 +1050,8 @@ els.groupSelect.addEventListener("change", async () => {
     rerenderGroups();
   } catch (e) {
     alert(`Failed to load group: ${e?.message || e}`);
+  } finally {
+    endDownload("group", downloadToken);
   }
 });
 
