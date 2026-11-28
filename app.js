@@ -586,7 +586,15 @@ function updateBleBrowserSupport() {
   // Keep the notification relevant to the selected connection type.
   const unsupported = isBleSelected ? !hasBluetooth : !hasSerial;
   notice.hidden = !unsupported;
-  link.hidden = !unsupported || !isiOS || !isBleSelected;
+  link.hidden = !unsupported;
+  const recommendBluefy = isiOS && isBleSelected;
+  link.href = recommendBluefy
+    ? "https://apps.apple.com/ie/app/bluefy-web-ble-browser/id1492822055"
+    : "https://www.google.com/chrome/";
+  link.textContent = recommendBluefy
+    ? "Install Bluefy from the App Store"
+    : "Download Google Chrome";
+  if (isiOS && !isBleSelected) link.hidden = true;
 
   if (unsupported) {
     title.textContent = isBleSelected
@@ -595,8 +603,8 @@ function updateBleBrowserSupport() {
     message.textContent = isBleSelected
       ? (isiOS
         ? "Safari and most iPhone/iPad browsers cannot connect to BLE readers. Install Bluefy, then open this website inside Bluefy."
-        : "This browser does not provide the Web Bluetooth API. Try a compatible browser such as Chrome or Edge, and use HTTPS.")
-      : "This browser does not provide Web Serial. Try desktop Chrome or Edge.";
+        : "This browser does not provide the Web Bluetooth API. Open this website in Google Chrome over HTTPS.")
+      : "This browser does not provide Web Serial. Use Google Chrome on a supported desktop computer.";
   }
 
   // Only block unsupported connections, not the rest of the utility.
